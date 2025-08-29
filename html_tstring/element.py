@@ -1,30 +1,33 @@
 import typing as t
 from dataclasses import dataclass, field
+from html import escape
 
 # See https://developer.mozilla.org/en-US/docs/Glossary/Void_element
-VOID_ELEMENTS = [
-    "area",
-    "base",
-    "br",
-    "col",
-    "embed",
-    "hr",
-    "img",
-    "input",
-    "link",
-    "meta",
-    "param",
-    "source",
-    "track",
-    "wbr",
-]
+VOID_ELEMENTS = frozenset(
+    [
+        "area",
+        "base",
+        "br",
+        "col",
+        "embed",
+        "hr",
+        "img",
+        "input",
+        "link",
+        "meta",
+        "param",
+        "source",
+        "track",
+        "wbr",
+    ]
+)
 
 
 @dataclass(frozen=True)
 class Element:
     tag: str
     children: t.Sequence[Element | str] = field(default_factory=tuple)
-    attrs: t.Mapping[str, str | bool | None] = field(default_factory=dict)
+    attrs: t.Mapping[str, str | bool] = field(default_factory=dict)
 
     @property
     def is_void(self) -> bool:
@@ -51,24 +54,20 @@ class Element:
         if self.is_fragment and self.attrs:
             raise ValueError("Fragment elements cannot have attributes.")
 
-    def render(self, *, indent: int = 0, level: int = 0) -> str:
-        """Render the element as a string with optional indentation."""
-        single_indent = " " * indent
-        indent_str = single_indent * level if indent else ""
+    def _render(self, *, indent: str, level: int) -> str:
+        newline = "\n" if indent else ""
+        indent_str = indent * level
+
         attrs_str = "".join(
-            f" {key}"
-            if value is True
-            else f' {key}="{value}"'
-            if value is not None
-            else ""
+            f" {key}" if value is True else f' {key}="{escape(str(value), quote=True)}"'
             for key, value in self.attrs.items()
         )
 
         if self.is_fragment:
-            return "\n".join(
-                child.render(indent=indent, level=level)
+            return newline.join(
+                child._render(indent=indent, level=level)
                 if isinstance(child, Element)
-                else f"{indent_str}{child}"
+                else f"{indent_str}{escape(child, quote=False)}"
                 for child in self.children
             )
 
@@ -78,13 +77,17 @@ class Element:
         if not self.has_children:
             return f"{indent_str}<{self.tag}{attrs_str}></{self.tag}>"
 
-        children_str = "\n".join(
-            child.render(indent=indent, level=level + 1)
+        children_str = newline.join(
+            child._render(indent=indent, level=level + 1)
             if isinstance(child, Element)
-            else f"{indent_str}  {child}"
+            else f"{indent_str}{indent}{escape(child, quote=False)}"
             for child in self.children
         )
-        return f"{indent_str}<{self.tag}{attrs_str}>\n{children_str}\n{indent_str}</{self.tag}>"
+        return f"{indent_str}<{self.tag}{attrs_str}>{newline}{children_str}{newline}{indent_str}</{self.tag}>"
+
+    def render(self, *, indent: int = 0, level: int = 0) -> str:
+        """Render the element as a string with optional indentation."""
+        return self._render(indent=" " * indent, level=level)
 
     def __html__(self) -> str:
         """
@@ -96,5 +99,5 @@ class Element:
         return self.render()
 
     def __str__(self) -> str:
-        """Pretty-print the element with an indent of 2 spaces."""
+        """Return a pretty-printed string representation for the element."""
         return self.render(indent=2)
