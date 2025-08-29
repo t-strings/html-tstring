@@ -25,6 +25,8 @@ VOID_ELEMENTS = frozenset(
 
 @dataclass(frozen=True)
 class Element:
+    """Represents an HTML element or fragment."""
+
     tag: str
     children: t.Sequence[Element | str] = field(default_factory=tuple)
     attrs: t.Mapping[str, str | bool] = field(default_factory=dict)
@@ -55,6 +57,7 @@ class Element:
             raise ValueError("Fragment elements cannot have attributes.")
 
     def _render(self, *, indent: str, level: int) -> str:
+        """Internal method to render the element with indentation."""
         newline = "\n" if indent else ""
         indent_str = indent * level
 
