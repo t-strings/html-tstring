@@ -48,7 +48,7 @@ def test_void_element():
 
 
 def test_void_element_with_attributes():
-    br = Element("br", attrs={"class": "line-break", "hidden": True})
+    br = Element("br", attrs={"class": "line-break", "hidden": None})
     assert br.render() == '<br class="line-break" hidden />'
     assert str(br) == '<br class="line-break" hidden />'
 
@@ -70,7 +70,7 @@ def test_standard_element():
 def test_standard_element_with_attributes():
     div = Element(
         "div",
-        attrs={"id": "main", "data-role": "container", "hidden": True},
+        attrs={"id": "main", "data-role": "container", "hidden": None},
     )
     assert div.render() == '<div id="main" data-role="container" hidden></div>'
     assert str(div) == '<div id="main" data-role="container" hidden></div>'

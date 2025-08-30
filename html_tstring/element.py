@@ -34,7 +34,7 @@ class Element:
 
     tag: str
     children: t.Sequence[Element | str] = field(default_factory=tuple)
-    attrs: t.Mapping[str, str | bool] = field(default_factory=dict)
+    attrs: t.Mapping[str, str | None] = field(default_factory=dict)
 
     @property
     def is_void(self) -> bool:
@@ -67,7 +67,7 @@ class Element:
         indent_str = indent * level
 
         attrs_str = "".join(
-            f" {key}" if value is True else f' {key}="{escape(str(value), quote=True)}"'
+            f" {key}" if value is None else f' {key}="{escape(value, quote=True)}"'
             for key, value in self.attrs.items()
         )
 
@@ -109,3 +109,11 @@ class Element:
     def __str__(self) -> str:
         """Return a pretty-printed string representation for the element."""
         return self.render(indent=2)
+
+    def append_child(self, child: "Element | str") -> "Element":
+        """Return a new Element with the given child appended."""
+        return Element(
+            tag=self.tag,
+            attrs=self.attrs,
+            children=(*self.children, child),
+        )
