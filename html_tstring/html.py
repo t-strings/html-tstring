@@ -77,13 +77,23 @@ def _attrs(
     """Substitute any bookkeeping keys in attributes."""
     result: dict[str, str | None] = {}
 
-    def _stringify_bk_single(key: str, value: object) -> str:
+    def _process_single(key: str, value: object) -> str | t.Literal[True] | None:
+        # TODO: XXX it's annoying that HTMLParser() uses attributes with value None
+        # to represent *present* boolean attributes, but that's what it does.
+        # HERE, for now, we return TRUE to indicate a present boolean attribute,
+        # NONE to indicate that this attribute should be omitted, and a string
+        # for an actual attribute value. It's all a little confusing, and I should
+        # revisit this.
         if key == "class":
             return _clsx_single(value)
         elif isinstance(value, str):
             return value
+        elif value is None or value is False:
+            return None
+        elif value is True:
+            return True
         else:
-            # TODO: handle non-str values here?
+            # TODO: do we really want to allow this?
             return str(value)
 
     # TODO: clean this up when I understand the full logic. It's a mess.
@@ -91,7 +101,12 @@ def _attrs(
     for key, value in attrs.items():
         if value is not None:
             if value in bookkeep:
-                result[key] = _stringify_bk_single(key, bookkeep[value].value)
+                bk_value = bookkeep[value].value
+                processed_value = _process_single(key, bk_value)
+                if processed_value is not None:
+                    result[key] = (
+                        processed_value if processed_value is not True else None
+                    )
             else:
                 result[key] = value
         else:
@@ -101,9 +116,9 @@ def _attrs(
                     result[bk_value] = None
                 elif isinstance(bk_value, dict):
                     for k, v in bk_value.items():
-                        result[k] = (
-                            _stringify_bk_single(k, v) if v is not None else None
-                        )
+                        processed_v = _process_single(k, v)
+                        if processed_v is not None:
+                            result[k] = processed_v if processed_v is not True else None
                 else:
                     raise ValueError(
                         f"Invalid attribute key substitution: {bk_value!r}"

@@ -236,6 +236,28 @@ def test_interpolated_unquoted_attribute_value():
     assert element.render() == '<div id="roquefort">Cheese</div>'
 
 
+def test_interpolated_attribute_value_true():
+    disabled = True
+    element = html(t"<button disabled={disabled}>Click me</button>")
+    assert element.tag == "button"
+    assert len(element.attrs) == 1
+    assert element.attrs["disabled"] is None
+    assert len(element.children) == 1
+    assert element.children[0] == "Click me"
+    assert element.render() == "<button disabled>Click me</button>"
+
+
+def test_interpolated_attribute_value_falsy():
+    disabled = False
+    crumpled = None
+    element = html(t"<button disabled={disabled} crumpled={crumpled}>Click me</button>")
+    assert element.tag == "button"
+    assert len(element.attrs) == 0
+    assert len(element.children) == 1
+    assert element.children[0] == "Click me"
+    assert element.render() == "<button>Click me</button>"
+
+
 def test_interpolated_attribute_spread_dict():
     attrs = {"href": "https://example.com/", "target": "_blank"}
     element = html(t"<a {attrs}>Link</a>")
