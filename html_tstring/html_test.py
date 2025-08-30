@@ -349,3 +349,17 @@ def test_interpolated_data_attributes():
     assert (
         element.render() == '<div data-user-id="123" data-role="admin">User Info</div>'
     )
+
+
+def test_interpolated_aria_attributes():
+    aria = {"label": "Close", "hidden": True}
+    element = html(t"<button aria={aria}>X</button>")
+    assert element.tag == "button"
+    assert len(element.attrs) == 2
+    assert element.attrs["aria-label"] == "Close"
+    assert element.attrs["aria-hidden"] == "True"
+    assert len(element.children) == 1
+    assert element.children[0] == "X"
+    assert (
+        element.render() == '<button aria-label="Close" aria-hidden="True">X</button>'
+    )

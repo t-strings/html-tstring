@@ -92,6 +92,13 @@ def _attrs(
                 raise ValueError(
                     f"Invalid value for 'data' attribute: expected dict, got {type(value).__name__}"
                 )
+        elif key == "aria":
+            if isinstance(value, dict):
+                return {f"aria-{k}": str(v) for k, v in value.items()}
+            else:
+                raise ValueError(
+                    f"Invalid value for 'aria' attribute: expected dict, got {type(value).__name__}"
+                )
         elif isinstance(value, str):
             return {key: value}
         elif value is None or value is False:
