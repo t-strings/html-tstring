@@ -11,7 +11,9 @@ ELT_ATTRS = 1
 ELT_CHILDREN = 2
 
 
-# TODO move this
+# TODO this is being put together super rapidly and so far it's a mess.
+# Once I have a sense of how the features are settling out, I will clean
+# this up, document it, and unit test it better. -Dave
 
 
 def clsx(*args: object) -> str:
@@ -144,7 +146,14 @@ def _children(
     for child in children:
         if isinstance(child, str):
             if child in bookkeep:
-                result.append(bookkeep[child].value)
+                bk_value = bookkeep[child].value
+                if isinstance(bk_value, (Element, str)):
+                    result.append(bk_value)
+                elif isinstance(bk_value, Template):
+                    result.append(html(bk_value))
+                else:
+                    # TODO: should I handle more types here?
+                    result.append(str(bk_value))
             else:
                 result.append(child)
         else:

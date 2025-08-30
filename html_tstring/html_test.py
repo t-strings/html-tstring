@@ -201,6 +201,46 @@ def test_escaping_of_interpolated_text_content():
 
 
 # --------------------------------------------------------------------------
+# Interpolated nesting of templates and elements
+# --------------------------------------------------------------------------
+
+
+def test_interpolated_template_content():
+    child = t"<span>Child</span>"
+    element = html(t"<div>{child}</div>")
+    assert element.tag == "div"
+    assert len(element.attrs) == 0
+    assert len(element.children) == 1
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "span"
+    assert len(element.children[0].children) == 1
+    assert element.children[0].children[0] == "Child"
+    assert element.render() == "<div><span>Child</span></div>"
+
+
+def test_interpolated_element_content():
+    child = html(t"<span>Child</span>")
+    element = html(t"<div>{child}</div>")
+    assert element.tag == "div"
+    assert len(element.attrs) == 0
+    assert len(element.children) == 1
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "span"
+    assert len(element.children[0].children) == 1
+    assert element.children[0].children[0] == "Child"
+    assert element.render() == "<div><span>Child</span></div>"
+
+
+def test_interpolated_nonstring_content():
+    number = 42
+    element = html(t"<p>The answer is {number}.</p>")
+    assert element.tag == "p"
+    assert len(element.attrs) == 0
+    assert element.children == ("The answer is ", "42", ".")
+    assert element.render() == "<p>The answer is 42.</p>"
+
+
+# --------------------------------------------------------------------------
 # Interpolated attribute content
 # --------------------------------------------------------------------------
 
