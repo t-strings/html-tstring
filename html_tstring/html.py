@@ -20,6 +20,8 @@ def _attrs(
     """Substitute any bookkeeping keys in attributes."""
     result: dict[str, str | None] = {}
 
+    # TODO: clean this up when I understand the full logic. It's a mess.
+
     for key, value in attrs.items():
         if value is not None:
             if value in bookkeep:

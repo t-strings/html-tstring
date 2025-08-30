@@ -170,7 +170,7 @@ def test_interpolated_attribute_spread_dict():
     assert element.render() == '<a href="https://example.com/" target="_blank">Link</a>'
 
 
-def test_interpoalted_mixed_attribute_values_and_spread_dict():
+def test_interpolated_mixed_attribute_values_and_spread_dict():
     attrs = {"href": "https://example.com/", "id": "link1"}
     target = "_blank"
     element = html(t'<a {attrs} target="{target}">Link</a>')
