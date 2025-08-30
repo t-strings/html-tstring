@@ -2,15 +2,8 @@ from .element import Element
 from .html import html
 
 
-def test_t_strings():
-    # Temporary. Ensure our GitHub CI action is running the 3.14 RC
-    template = t"hello {42}"
-    assert template.strings == ("hello ", "")
-    assert template.values == (42,)
-
-
 def test_parse_empty():
-    element = html("")
+    element = html(t"")
     assert element.tag == ""
     assert len(element.attrs) == 0
     assert len(element.children) == 0
@@ -18,7 +11,7 @@ def test_parse_empty():
 
 
 def test_parse_text():
-    element = html("Hello, world!")
+    element = html(t"Hello, world!")
     assert element.tag == ""
     assert len(element.attrs) == 0
     assert len(element.children) == 1
@@ -27,7 +20,7 @@ def test_parse_text():
 
 
 def test_parse_void_element():
-    element = html("<br>")
+    element = html(t"<br>")
     assert element.tag == "br"
     assert len(element.attrs) == 0
     assert len(element.children) == 0
@@ -35,7 +28,7 @@ def test_parse_void_element():
 
 
 def test_parse_void_element_self_closed():
-    element = html("<br />")
+    element = html(t"<br />")
     assert element.tag == "br"
     assert len(element.attrs) == 0
     assert len(element.children) == 0
@@ -44,7 +37,7 @@ def test_parse_void_element_self_closed():
 
 def test_parse_chain_of_void_elements():
     # Make sure our handling of CPython issue #69445 is reasonable.
-    element = html("<br><hr><img src='image.png' /><br /><hr>")
+    element = html(t"<br><hr><img src='image.png' /><br /><hr>")
     assert element.tag == ""
     assert len(element.attrs) == 0
     assert len(element.children) == 5
@@ -64,7 +57,7 @@ def test_parse_chain_of_void_elements():
 
 
 def test_parse_element_with_text():
-    element = html("<p>Hello, world!</p>")
+    element = html(t"<p>Hello, world!</p>")
     assert element.tag == "p"
     assert len(element.attrs) == 0
     assert len(element.children) == 1
@@ -73,7 +66,7 @@ def test_parse_element_with_text():
 
 
 def test_parse_element_with_attributes():
-    element = html('<a href="https://example.com" target="_blank">Link</a>')
+    element = html(t'<a href="https://example.com" target="_blank">Link</a>')
     assert element.tag == "a"
     assert len(element.attrs) == 2
     assert element.attrs["href"] == "https://example.com"
@@ -84,7 +77,7 @@ def test_parse_element_with_attributes():
 
 
 def test_parse_nested_elements():
-    element = html("<div><p>Hello</p><p>World</p></div>")
+    element = html(t"<div><p>Hello</p><p>World</p></div>")
     assert element.tag == "div"
     assert len(element.attrs) == 0
     assert len(element.children) == 2

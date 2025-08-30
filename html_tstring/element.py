@@ -33,8 +33,8 @@ class Element:
     """Represents an HTML element or fragment."""
 
     tag: str
-    children: t.Sequence[Element | str] = field(default_factory=tuple)
     attrs: t.Mapping[str, str | None] = field(default_factory=dict)
+    children: t.Sequence[Element | str] = field(default_factory=tuple)
 
     @property
     def is_void(self) -> bool:

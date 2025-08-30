@@ -1,23 +1,36 @@
 import typing as t
-
-# from string.templatelib import Template
 from html.parser import HTMLParser
+from string.templatelib import Template
 
 from .element import VOID_ELEMENTS, Element
 
+# For performance, a mutable tuple is used while parsing.
+type ElementTuple = tuple[str, dict[str, str | None], list["ElementTuple | str"]]
+
+
+def _element_from_tuple(tpl: ElementTuple) -> Element:
+    return Element(
+        tag=tpl[0],
+        attrs=tpl[1],
+        children=tuple(
+            _element_from_tuple(child) if isinstance(child, tuple) else child
+            for child in tpl[2]
+        ),
+    )
+
 
 class ElementParser(HTMLParser):
-    stack: list[Element]
+    stack: list[ElementTuple]
 
     def __init__(self):
         super().__init__()
-        self.stack = [Element(tag="")]
+        self.stack = [("", {}, [])]
 
     def handle_starttag(
         self, tag: str, attrs: t.Sequence[tuple[str, str | None]]
     ) -> None:
-        new_element = Element(tag=tag, attrs=dict(attrs))
-        self.stack.append(new_element)
+        element = (tag, dict(attrs), [])
+        self.stack.append(element)
 
         # Unfortunately, Python's built-in HTMLParser has inconsistent behavior
         # with void elements. In particular, it calls handle_endtag() for them
@@ -34,13 +47,11 @@ class ElementParser(HTMLParser):
 
     def handle_endtag(self, tag: str) -> None:
         if len(self.stack) == 1:
-            # Special case to handle void elements that are not self-closed.
+            # Special case to handle void elements that are not self-closed aka
+            # cpython #69445.
             if tag in VOID_ELEMENTS:
-                if (
-                    self.stack[0].children
-                    and isinstance(self.stack[0].children[-1], Element)
-                    and self.stack[0].children[-1].tag == tag
-                ):
+                children = self.stack[0][2]
+                if isinstance(children[-1], tuple) and children[-1][0] == tag:
                     # The last child is the void element we just added.
                     return
             raise ValueError(
@@ -48,28 +59,34 @@ class ElementParser(HTMLParser):
             )
 
         element = self.stack.pop()
-        if element.tag != tag:
-            raise ValueError(f"Mismatched closing tag </{tag}> for <{element.tag}>.")
+        if element[0] != tag:
+            raise ValueError(f"Mismatched closing tag </{tag}> for <{element[0]}>.")
 
-        self.stack[-1] = self.stack[-1].append_child(element)
+        self._append_child(element)
 
     def handle_data(self, data: str) -> None:
-        self.stack[-1] = self.stack[-1].append_child(data)
+        self._append_child(data)
+
+    def _append_child(self, child: "ElementTuple | str") -> None:
+        self.stack[-1][2].append(child)
 
     def get_element(self) -> Element:
         if len(self.stack) != 1:
             raise ValueError("Invalid HTML structure: unclosed tags remain.")
 
         root = self.stack[0]
-        assert root.is_fragment
 
-        if len(root.children) == 1 and isinstance(root.children[0], Element):
-            return root.children[0]
-        return root
+        if len(root[2]) == 1 and isinstance(root[2][0], tuple):
+            return _element_from_tuple(root[2][0])
+        return _element_from_tuple(root)
 
 
-def html(template: str) -> Element:
+def html(template: Template) -> Element:
     """Create an HTML element from a string."""
     parser = ElementParser()
-    parser.feed(template)
+    for part in template:
+        if isinstance(part, str):
+            parser.feed(part)
+        else:
+            raise NotImplementedError()
     return parser.get_element()
