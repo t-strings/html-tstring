@@ -1,5 +1,83 @@
+import pytest
+
 from .element import Element
-from .html import html
+from .html import clsx, html
+
+# --------------------------------------------------------------------------
+# clsx tests
+# --------------------------------------------------------------------------
+
+
+def test_clsx_empty():
+    assert clsx() == ""
+
+
+def test_clsx_strings():
+    assert clsx("btn", "btn-primary") == "btn btn-primary"
+
+
+def test_clsx_strings_strip():
+    assert clsx("  btn  ", " btn-primary ") == "btn btn-primary"
+
+
+def test_cslx_empty_strings():
+    assert clsx("", "btn", "", "btn-primary", "") == "btn btn-primary"
+
+
+def test_clsx_lists_and_tuples():
+    assert (
+        clsx(["btn", "btn-primary"], ("active", "disabled"))
+        == "btn btn-primary active disabled"
+    )
+
+
+def test_clsx_dicts():
+    assert (
+        clsx(
+            "btn",
+            {"btn-primary": True, "disabled": False, "active": True, "shown": "yes"},
+        )
+        == "btn btn-primary active shown"
+    )
+
+
+def test_clsx_mixed_inputs():
+    assert (
+        clsx(
+            "btn",
+            ["btn-primary", "active"],
+            {"disabled": True, "hidden": False},
+            ("extra",),
+        )
+        == "btn btn-primary active disabled extra"
+    )
+
+
+def test_clsx_ignores_none_and_false():
+    assert (
+        clsx("btn", None, False, "active", {"hidden": None, "visible": True})
+        == "btn active visible"
+    )
+
+
+def test_clsx_raises_type_error_on_invalid_input():
+    with pytest.raises(ValueError):
+        clsx(123)
+
+    with pytest.raises(ValueError):
+        clsx(["btn", 456])
+
+
+def test_clsx_kitchen_sink():
+    assert (
+        clsx(
+            "foo",
+            [1 and "bar", {"baz": False, "bat": None}, ["hello", ["world"]]],
+            "cya",
+        )
+        == "foo bar hello world cya"
+    )
+
 
 # --------------------------------------------------------------------------
 # Basic HTML parsing tests
@@ -100,7 +178,7 @@ def test_parse_nested_elements():
 
 
 # --------------------------------------------------------------------------
-# t-string substitution tests
+# Interpolated content tests
 # --------------------------------------------------------------------------
 
 
@@ -201,4 +279,32 @@ def test_multiple_attribute_spread_dicts():
     assert (
         element.render()
         == '<a href="https://example.com/" id="link1" target="_blank">Link</a>'
+    )
+
+
+def test_interpolated_class_attribute():
+    classes = ["btn", "btn-primary", False and "disabled", None, {"active": True}]
+    element = html(t'<button class="{classes}">Click me</button>')
+    assert element.tag == "button"
+    assert len(element.attrs) == 1
+    assert element.attrs["class"] == "btn btn-primary active"
+    assert len(element.children) == 1
+    assert element.children[0] == "Click me"
+    assert (
+        element.render() == '<button class="btn btn-primary active">Click me</button>'
+    )
+
+
+def test_interpolated_attribute_spread_with_class_attribute():
+    attrs = {"id": "button1", "class": ["btn", "btn-primary"]}
+    element = html(t"<button {attrs}>Click me</button>")
+    assert element.tag == "button"
+    assert len(element.attrs) == 2
+    assert element.attrs["id"] == "button1"
+    assert element.attrs["class"] == "btn btn-primary"
+    assert len(element.children) == 1
+    assert element.children[0] == "Click me"
+    assert (
+        element.render()
+        == '<button id="button1" class="btn btn-primary">Click me</button>'
     )

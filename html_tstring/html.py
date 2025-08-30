@@ -11,6 +11,63 @@ ELT_ATTRS = 1
 ELT_CHILDREN = 2
 
 
+# TODO move this
+
+
+def clsx(*args: object) -> str:
+    """
+    Construct a space-separated class string from various inputs.
+
+    Accepts strings, lists/tuples of strings, and dicts mapping class names to
+    boolean values. Ignores None and False values.
+
+    Examples:
+        clsx("btn", "btn-primary") -> "btn btn-primary"
+        clsx("btn", {"btn-primary": True, "disabled": False}) -> "btn btn-primary"
+        clsx(["btn", "btn-primary"], {"disabled": True}) -> "btn btn-primary disabled"
+        clsx("btn", None, False, "active") -> "btn active"
+
+    Args:
+        *args: Variable length argument list containing strings, lists/tuples,
+               or dicts.
+
+    Returns:
+        A single string with class names separated by spaces.
+    """
+    classes: list[str] = []
+
+    for arg in args:
+        if isinstance(arg, str):
+            classes.append(arg)
+        elif isinstance(arg, (list, tuple)):
+            classes.append(clsx(*arg))
+        elif isinstance(arg, dict):
+            for key, value in arg.items():
+                if bool(value):
+                    classes.append(key)
+        elif arg is None or isinstance(arg, bool):
+            continue
+        else:
+            raise ValueError(f"Invalid class argument type: {type(arg).__name__}")
+
+    return " ".join(stripped for c in classes if (stripped := c.strip()))
+
+
+def _clsx_single(arg: object) -> str:
+    """Helper to process a single argument to clsx()."""
+    if isinstance(arg, str):
+        return arg.strip()
+    elif isinstance(arg, (list, tuple)):
+        return clsx(*arg)
+    elif isinstance(arg, dict):
+        classes = [key for key, value in arg.items() if bool(value)]
+        return " ".join(classes)
+    elif arg is None or isinstance(arg, bool):
+        return ""
+    else:
+        raise ValueError(f"Invalid class argument type: {type(arg).__name__}")
+
+
 # TODO document, clean up, and individually unit test all helper functions here.
 
 
@@ -20,14 +77,21 @@ def _attrs(
     """Substitute any bookkeeping keys in attributes."""
     result: dict[str, str | None] = {}
 
+    def _stringify_bk_single(key: str, value: object) -> str:
+        if key == "class":
+            return _clsx_single(value)
+        elif isinstance(value, str):
+            return value
+        else:
+            # TODO: handle non-str values here?
+            return str(value)
+
     # TODO: clean this up when I understand the full logic. It's a mess.
 
     for key, value in attrs.items():
         if value is not None:
             if value in bookkeep:
-                # TODO: should we be handling non-str values here?
-                bk_value = bookkeep[value].value
-                result[key] = str(bk_value)
+                result[key] = _stringify_bk_single(key, bookkeep[value].value)
             else:
                 result[key] = value
         else:
@@ -37,7 +101,9 @@ def _attrs(
                     result[bk_value] = None
                 elif isinstance(bk_value, dict):
                     for k, v in bk_value.items():
-                        result[k] = v
+                        result[k] = (
+                            _stringify_bk_single(k, v) if v is not None else None
+                        )
                 else:
                     raise ValueError(
                         f"Invalid attribute key substitution: {bk_value!r}"
