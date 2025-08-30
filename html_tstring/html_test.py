@@ -104,7 +104,7 @@ def test_parse_nested_elements():
 # --------------------------------------------------------------------------
 
 
-def test_interpolated_string():
+def text_interpolated_text_content():
     name = "Alice"
     element = html(t"<p>Hello, {name}!</p>")
     assert element.tag == "p"
@@ -113,7 +113,7 @@ def test_interpolated_string():
     assert element.render() == "<p>Hello, Alice!</p>"
 
 
-def test_escaping_in_text():
+def test_escaping_of_interpolated_text_content():
     name = "<Alice & Bob>"
     element = html(t"<p>Hello, {name}!</p>")
     assert element.tag == "p"
@@ -122,7 +122,7 @@ def test_escaping_in_text():
     assert element.render() == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
 
 
-def test_interpolated_attribute():
+def test_interpolated_attribute_value():
     url = "https://example.com/"
     element = html(t'<a href="{url}">Link</a>')
     assert element.tag == "a"
@@ -133,7 +133,7 @@ def test_interpolated_attribute():
     assert element.render() == '<a href="https://example.com/">Link</a>'
 
 
-def test_escaping_in_attribute():
+def test_escaping_of_interpolated_attribute_value():
     url = 'https://example.com/?q="test"&lang=en'
     element = html(t'<a href="{url}">Link</a>')
     assert element.tag == "a"
@@ -147,7 +147,7 @@ def test_escaping_in_attribute():
     )
 
 
-def test_interpolated_attribute_unquoted():
+def test_interpolated_unquoted_attribute_value():
     id = "roquefort"
     element = html(t"<div id={id}>Cheese</div>")
     assert element.tag == "div"
@@ -156,3 +156,49 @@ def test_interpolated_attribute_unquoted():
     assert len(element.children) == 1
     assert element.children[0] == "Cheese"
     assert element.render() == '<div id="roquefort">Cheese</div>'
+
+
+def test_interpolated_attribute_spread_dict():
+    attrs = {"href": "https://example.com/", "target": "_blank"}
+    element = html(t"<a {attrs}>Link</a>")
+    assert element.tag == "a"
+    assert len(element.attrs) == 2
+    assert element.attrs["href"] == "https://example.com/"
+    assert element.attrs["target"] == "_blank"
+    assert len(element.children) == 1
+    assert element.children[0] == "Link"
+    assert element.render() == '<a href="https://example.com/" target="_blank">Link</a>'
+
+
+def test_interpoalted_mixed_attribute_values_and_spread_dict():
+    attrs = {"href": "https://example.com/", "id": "link1"}
+    target = "_blank"
+    element = html(t'<a {attrs} target="{target}">Link</a>')
+    assert element.tag == "a"
+    assert len(element.attrs) == 3
+    assert element.attrs["href"] == "https://example.com/"
+    assert element.attrs["id"] == "link1"
+    assert element.attrs["target"] == "_blank"
+    assert len(element.children) == 1
+    assert element.children[0] == "Link"
+    assert (
+        element.render()
+        == '<a href="https://example.com/" id="link1" target="_blank">Link</a>'
+    )
+
+
+def test_multiple_attribute_spread_dicts():
+    attrs1 = {"href": "https://example.com/", "id": "overwrtten"}
+    attrs2 = {"target": "_blank", "id": "link1"}
+    element = html(t"<a {attrs1} {attrs2}>Link</a>")
+    assert element.tag == "a"
+    assert len(element.attrs) == 3
+    assert element.attrs["href"] == "https://example.com/"
+    assert element.attrs["target"] == "_blank"
+    assert element.attrs["id"] == "link1"
+    assert len(element.children) == 1
+    assert element.children[0] == "Link"
+    assert (
+        element.render()
+        == '<a href="https://example.com/" id="link1" target="_blank">Link</a>'
+    )

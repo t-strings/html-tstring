@@ -18,12 +18,32 @@ def _attrs(
     attrs: dict[str, str | None], bookkeep: dict[str, Interpolation]
 ) -> dict[str, str | None]:
     """Substitute any bookkeeping keys in attributes."""
-    return {
-        key: (bookkeep[value].value if value in bookkeep else value)
-        if value is not None
-        else None
-        for key, value in attrs.items()
-    }
+    result: dict[str, str | None] = {}
+
+    for key, value in attrs.items():
+        if value is not None:
+            if value in bookkeep:
+                # TODO: should we be handling non-str values here?
+                bk_value = bookkeep[value].value
+                result[key] = str(bk_value)
+            else:
+                result[key] = value
+        else:
+            if key in bookkeep:
+                bk_value = bookkeep[key].value
+                if isinstance(bk_value, str):
+                    result[bk_value] = None
+                elif isinstance(bk_value, dict):
+                    for k, v in bk_value.items():
+                        result[k] = v
+                else:
+                    raise ValueError(
+                        f"Invalid attribute key substitution: {bk_value!r}"
+                    )
+            else:
+                result[key] = None
+
+    return result
 
 
 def _children(
@@ -131,7 +151,7 @@ def html(template: Template) -> Element:
         if isinstance(part, str):
             parser.feed(part)
         else:
-            key = f"__TS_BK_{count}__"
+            key = f"__ts_bk_{count}__"
             bookkeep[key] = part
             parser.feed(key)
             count += 1
