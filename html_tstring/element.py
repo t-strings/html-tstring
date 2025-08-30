@@ -23,6 +23,11 @@ VOID_ELEMENTS = frozenset(
 )
 
 
+# TODO: I'm not yet happy with how significant whitespace is handled
+# when pretty-printing. It's possible that __str__() should not use
+# indentation at all? I need to think about this more.
+
+
 @dataclass(frozen=True)
 class Element:
     """Represents an HTML element or fragment."""
