@@ -1,21 +1,54 @@
 import typing as t
 from html.parser import HTMLParser
-from string.templatelib import Template
+from string.templatelib import Interpolation, Template
 
 from .element import VOID_ELEMENTS, Element
 
 # For performance, a mutable tuple is used while parsing.
 type ElementTuple = tuple[str, dict[str, str | None], list["ElementTuple | str"]]
+ELT_TAG = 0
+ELT_ATTRS = 1
+ELT_CHILDREN = 2
 
 
-def _element_from_tuple(tpl: ElementTuple) -> Element:
+# TODO document, clean up, and individually unit test all helper functions here.
+
+
+def _attrs(
+    attrs: dict[str, str | None], bookkeep: dict[str, Interpolation]
+) -> dict[str, str | None]:
+    """Substitute any bookkeeping keys in attributes."""
+    return {
+        key: (bookkeep[value].value if value in bookkeep else value)
+        if value is not None
+        else None
+        for key, value in attrs.items()
+    }
+
+
+def _children(
+    children: list["ElementTuple | str"], bookkeep: dict[str, Interpolation]
+) -> tuple[Element | str, ...]:
+    """Substitute any bookkeeping keys in children."""
+    result: list[Element | str] = []
+    for child in children:
+        if isinstance(child, str):
+            if child in bookkeep:
+                result.append(bookkeep[child].value)
+            else:
+                result.append(child)
+        else:
+            result.append(_element_from_tuple(child, bookkeep))
+    return tuple(result)
+
+
+def _element_from_tuple(
+    element: ElementTuple, bookkeep: dict[str, Interpolation]
+) -> Element:
     return Element(
-        tag=tpl[0],
-        attrs=tpl[1],
-        children=tuple(
-            _element_from_tuple(child) if isinstance(child, tuple) else child
-            for child in tpl[2]
-        ),
+        tag=element[ELT_TAG],
+        attrs=_attrs(element[ELT_ATTRS], bookkeep),
+        children=_children(element[ELT_CHILDREN], bookkeep),
     )
 
 
@@ -50,8 +83,8 @@ class ElementParser(HTMLParser):
             # Special case to handle void elements that are not self-closed aka
             # cpython #69445.
             if tag in VOID_ELEMENTS:
-                children = self.stack[0][2]
-                if isinstance(children[-1], tuple) and children[-1][0] == tag:
+                children = self.stack[0][ELT_CHILDREN]
+                if isinstance(children[-1], tuple) and children[-1][ELT_TAG] == tag:
                     # The last child is the void element we just added.
                     return
             raise ValueError(
@@ -59,34 +92,49 @@ class ElementParser(HTMLParser):
             )
 
         element = self.stack.pop()
-        if element[0] != tag:
-            raise ValueError(f"Mismatched closing tag </{tag}> for <{element[0]}>.")
+        if element[ELT_TAG] != tag:
+            raise ValueError(
+                f"Mismatched closing tag </{tag}> for <{element[ELT_TAG]}>."
+            )
 
-        self._append_child(element)
+        self.append_child(element)
 
     def handle_data(self, data: str) -> None:
-        self._append_child(data)
+        self.append_child(data)
 
-    def _append_child(self, child: "ElementTuple | str") -> None:
-        self.stack[-1][2].append(child)
+    def append_child(self, child: "ElementTuple | str") -> None:
+        self.stack[-1][ELT_CHILDREN].append(child)
 
-    def get_element(self) -> Element:
+    def get_root(self) -> ElementTuple:
         if len(self.stack) != 1:
             raise ValueError("Invalid HTML structure: unclosed tags remain.")
 
         root = self.stack[0]
 
-        if len(root[2]) == 1 and isinstance(root[2][0], tuple):
-            return _element_from_tuple(root[2][0])
-        return _element_from_tuple(root)
+        if len(root[ELT_CHILDREN]) == 1 and isinstance(root[ELT_CHILDREN][0], tuple):
+            return t.cast(ElementTuple, root[ELT_CHILDREN][0])
+
+        return root
+
+
+# TODO: so much to do here, to handle different types of interpolations
+# and their contexts. Also, to cache parsed templates.
 
 
 def html(template: Template) -> Element:
     """Create an HTML element from a string."""
+    count: int = 0
+    bookkeep: dict[str, Interpolation] = {}
+
     parser = ElementParser()
     for part in template:
         if isinstance(part, str):
             parser.feed(part)
         else:
-            raise NotImplementedError()
-    return parser.get_element()
+            key = f"__TS_BK_{count}__"
+            bookkeep[key] = part
+            parser.feed(key)
+            count += 1
+    parser.close()
+    root = parser.get_root()
+    return _element_from_tuple(root, bookkeep)
