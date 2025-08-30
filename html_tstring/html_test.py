@@ -178,7 +178,7 @@ def test_parse_nested_elements():
 
 
 # --------------------------------------------------------------------------
-# Interpolated content tests
+# Interpolated text content
 # --------------------------------------------------------------------------
 
 
@@ -198,6 +198,11 @@ def test_escaping_of_interpolated_text_content():
     assert len(element.attrs) == 0
     assert element.children == ("Hello, ", "<Alice & Bob>", "!")
     assert element.render() == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
+
+
+# --------------------------------------------------------------------------
+# Interpolated attribute content
+# --------------------------------------------------------------------------
 
 
 def test_interpolated_attribute_value():
@@ -329,4 +334,18 @@ def test_interpolated_attribute_spread_with_class_attribute():
     assert (
         element.render()
         == '<button id="button1" class="btn btn-primary">Click me</button>'
+    )
+
+
+def test_interpolated_data_attributes():
+    data = {"user-id": 123, "role": "admin"}
+    element = html(t"<div data={data}>User Info</div>")
+    assert element.tag == "div"
+    assert len(element.attrs) == 2
+    assert element.attrs["data-user-id"] == "123"
+    assert element.attrs["data-role"] == "admin"
+    assert len(element.children) == 1
+    assert element.children[0] == "User Info"
+    assert (
+        element.render() == '<div data-user-id="123" data-role="admin">User Info</div>'
     )

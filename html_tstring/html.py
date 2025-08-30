@@ -77,24 +77,30 @@ def _attrs(
     """Substitute any bookkeeping keys in attributes."""
     result: dict[str, str | None] = {}
 
-    def _process_single(key: str, value: object) -> str | t.Literal[True] | None:
-        # TODO: XXX it's annoying that HTMLParser() uses attributes with value None
-        # to represent *present* boolean attributes, but that's what it does.
-        # HERE, for now, we return TRUE to indicate a present boolean attribute,
-        # NONE to indicate that this attribute should be omitted, and a string
-        # for an actual attribute value. It's all a little confusing, and I should
-        # revisit this.
+    def _process_attr_key(key: str, value: object) -> dict[str, str | None]:
+        # TODO XXX clarify the contract here. Mostly, we're mapping a single
+        # key and value in the input template to zero or more key-value pairs
+        # in the output element. But in the case of `data` (maybe others?),
+        # we might want to map a single key in the input template to multiple
+        # keys in the output element. So the return type here is a dict.
         if key == "class":
-            return _clsx_single(value)
+            return {key: _clsx_single(value)}
+        elif key == "data":
+            if isinstance(value, dict):
+                return {f"data-{k}": str(v) for k, v in value.items()}
+            else:
+                raise ValueError(
+                    f"Invalid value for 'data' attribute: expected dict, got {type(value).__name__}"
+                )
         elif isinstance(value, str):
-            return value
+            return {key: value}
         elif value is None or value is False:
-            return None
+            return {}
         elif value is True:
-            return True
+            return {key: None}
         else:
             # TODO: do we really want to allow this?
-            return str(value)
+            return {key: str(value)}
 
     # TODO: clean this up when I understand the full logic. It's a mess.
 
@@ -102,11 +108,7 @@ def _attrs(
         if value is not None:
             if value in bookkeep:
                 bk_value = bookkeep[value].value
-                processed_value = _process_single(key, bk_value)
-                if processed_value is not None:
-                    result[key] = (
-                        processed_value if processed_value is not True else None
-                    )
+                result.update(_process_attr_key(key, bk_value))
             else:
                 result[key] = value
         else:
@@ -116,9 +118,7 @@ def _attrs(
                     result[bk_value] = None
                 elif isinstance(bk_value, dict):
                     for k, v in bk_value.items():
-                        processed_v = _process_single(k, v)
-                        if processed_v is not None:
-                            result[k] = processed_v if processed_v is not True else None
+                        result.update(_process_attr_key(k, v))
                 else:
                     raise ValueError(
                         f"Invalid attribute key substitution: {bk_value!r}"
