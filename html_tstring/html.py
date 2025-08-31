@@ -151,6 +151,15 @@ def _children(
                     result.append(bk_value)
                 elif isinstance(bk_value, Template):
                     result.append(html(bk_value))
+                elif isinstance(bk_value, (list, tuple)):
+                    # TODO XXX this should recurse
+                    for item in bk_value:
+                        if isinstance(item, (Element, str)):
+                            result.append(item)
+                        elif isinstance(item, Template):
+                            result.append(html(item))
+                        else:
+                            result.append(str(item))
                 else:
                     # TODO: should I handle more types here?
                     result.append(str(bk_value))
@@ -161,13 +170,39 @@ def _children(
     return tuple(result)
 
 
+def _resolve_tag(
+    tag: str,
+    bookkeep: dict[str, Interpolation],
+    attrs: dict[str, str | None],
+    children: tuple[Element | str, ...],
+) -> str | Element:
+    if tag in bookkeep:
+        bk_value = bookkeep[tag].value
+        if isinstance(bk_value, str):
+            return bk_value
+        elif callable(bk_value):
+            result = bk_value(*children, **attrs)
+            if isinstance(result, (Element, str)):
+                return result
+            elif isinstance(result, Template):
+                return html(result)
+            else:
+                raise ValueError(f"Invalid tag callable result: {result!r}")
+        else:
+            raise ValueError(f"Invalid tag substitution: {bk_value!r}")
+    return tag
+
+
 def _element_from_tuple(
     element: ElementTuple, bookkeep: dict[str, Interpolation]
 ) -> Element:
-    return Element(
-        tag=element[ELT_TAG],
-        attrs=_attrs(element[ELT_ATTRS], bookkeep),
-        children=_children(element[ELT_CHILDREN], bookkeep),
+    attrs = _attrs(element[ELT_ATTRS], bookkeep)
+    children = _children(element[ELT_CHILDREN], bookkeep)
+    tag_or_elt = _resolve_tag(element[ELT_TAG], bookkeep, attrs, children)
+    return (
+        Element(tag=tag_or_elt, attrs=attrs, children=children)
+        if isinstance(tag_or_elt, str)
+        else tag_or_elt
     )
 
 
@@ -243,6 +278,7 @@ class ElementParser(HTMLParser):
 def html(template: Template) -> Element:
     """Create an HTML element from a string."""
     count: int = 0
+    callables: dict[t.Callable, str] = {}
     bookkeep: dict[str, Interpolation] = {}
 
     parser = ElementParser()
@@ -250,10 +286,17 @@ def html(template: Template) -> Element:
         if isinstance(part, str):
             parser.feed(part)
         else:
-            key = f"__ts_bk_{count}__"
+            # TODO: CONSIDER: how to choose a key that won't collide with
+            # your typical t-string content?
+            key = f"ts-bk-{count}"
+            # TODO: CONSIDER: do we want to broaden this key reuse to
+            # non-callables too? Or is it not worth the complexity?
+            if callable(part.value):
+                key = callables.get(part.value, key)
+                callables[part.value] = key
             bookkeep[key] = part
-            parser.feed(key)
             count += 1
+            parser.feed(key)
     parser.close()
     root = parser.get_root()
     return _element_from_tuple(root, bookkeep)

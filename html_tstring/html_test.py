@@ -1,3 +1,5 @@
+from string.templatelib import Template
+
 import pytest
 
 from .element import Element
@@ -240,6 +242,73 @@ def test_interpolated_nonstring_content():
     assert element.render() == "<p>The answer is 42.</p>"
 
 
+def test_list_items():
+    items = ["Apple", "Banana", "Cherry"]
+    element = html(t"<ul>{[t'<li>{item}</li>' for item in items]}</ul>")
+    assert element.tag == "ul"
+    assert len(element.attrs) == 0
+    assert len(element.children) == 3
+
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "li"
+    assert len(element.children[0].children) == 1
+    assert element.children[0].children[0] == "Apple"
+
+    assert isinstance(element.children[1], Element)
+    assert element.children[1].tag == "li"
+    assert len(element.children[1].children) == 1
+    assert element.children[1].children[0] == "Banana"
+
+    assert isinstance(element.children[2], Element)
+    assert element.children[2].tag == "li"
+    assert len(element.children[2].children) == 1
+    assert element.children[2].children[0] == "Cherry"
+
+    assert element.render() == "<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>"
+
+
+def test_nested_list_items():
+    # TODO XXX this is a pretty abusrd test case; clean it up when refactoring
+    outer = ["fruit", "more fruit"]
+    inner = ["apple", "banana", "cherry"]
+    inner_items = [t"<li>{item}</li>" for item in inner]
+    outer_items = [t"<li>{category}<ul>{inner_items}</ul></li>" for category in outer]
+    element = html(t"<ul>{outer_items}</ul>")
+    assert element.tag == "ul"
+    assert len(element.attrs) == 0
+    assert len(element.children) == 2
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "li"
+    assert len(element.children[0].children) == 2
+    assert element.children[0].children[0] == "fruit"
+    assert isinstance(element.children[0].children[1], Element)
+    assert element.children[0].children[1].tag == "ul"
+    assert len(element.children[0].children[1].children) == 3
+    assert element.children[0].children[1].children[0].tag == "li"  # type: ignore
+    assert element.children[0].children[1].children[0].children[0] == "apple"  # type: ignore
+    assert element.children[0].children[1].children[1].tag == "li"  # type: ignore
+    assert element.children[0].children[1].children[1].children[0] == "banana"  # type: ignore
+    assert element.children[0].children[1].children[2].tag == "li"  # type: ignore
+    assert element.children[0].children[1].children[2].children[0] == "cherry"  # type: ignore
+    assert isinstance(element.children[1], Element)
+    assert element.children[1].tag == "li"
+    assert len(element.children[1].children) == 2
+    assert element.children[1].children[0] == "more fruit"
+    assert isinstance(element.children[1].children[1], Element)
+    assert element.children[1].children[1].tag == "ul"
+    assert len(element.children[1].children[1].children) == 3
+    assert element.children[1].children[1].children[0].tag == "li"  # type: ignore
+    assert element.children[1].children[1].children[0].children[0] == "apple"  # type: ignore
+    assert element.children[1].children[1].children[1].tag == "li"  # type: ignore
+    assert element.children[1].children[1].children[1].children[0] == "banana"  # type: ignore
+    assert element.children[1].children[1].children[2].tag == "li"  # type: ignore
+    assert element.children[1].children[1].children[2].children[0] == "cherry"  # type: ignore
+    assert (
+        element.render()
+        == "<ul><li>fruit<ul><li>apple</li><li>banana</li><li>cherry</li></ul></li><li>more fruit<ul><li>apple</li><li>banana</li><li>cherry</li></ul></li></ul>"
+    )
+
+
 # --------------------------------------------------------------------------
 # Interpolated attribute content
 # --------------------------------------------------------------------------
@@ -403,3 +472,41 @@ def test_interpolated_aria_attributes():
     assert (
         element.render() == '<button aria-label="Close" aria-hidden="True">X</button>'
     )
+
+
+# --------------------------------------------------------------------------
+# Function component interpolation tests
+# --------------------------------------------------------------------------
+
+
+def TemplateComponent(
+    *children: Element | str, first: int, second: int, third: str, **props: str
+) -> Template:
+    attrs = {
+        "id": third,
+        "data": {"first": first, "second": second},
+        **props,
+    }
+    return t"<div {attrs}>Component: {children}</div>"
+
+
+def test_interpolated_template_component():
+    element = html(
+        t'<{TemplateComponent} first=1 second={99} third="comp1" class="my-comp">Hello, Component!</{TemplateComponent}>'
+    )
+    assert element.tag == "div"
+    assert len(element.attrs) == 4
+    assert element.attrs["id"] == "comp1"
+    assert element.attrs["data-first"] == "1"
+    assert element.attrs["data-second"] == "99"
+    assert element.attrs["class"] == "my-comp"
+    assert element.children == ("Component: ", "Hello, Component!")
+    assert (
+        element.render()
+        == '<div id="comp1" data-first="1" data-second="99" class="my-comp">Component: Hello, Component!</div>'
+    )
+
+
+def test_invalid_component_invocation():
+    with pytest.raises(TypeError):
+        _ = html(t"<{TemplateComponent}>Missing props</{TemplateComponent}>")  # type: ignore
