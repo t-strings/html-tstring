@@ -12,8 +12,8 @@ ELT_CHILDREN = 2
 
 
 # TODO this is being put together super rapidly and so far it's a mess.
-# Once I have a sense of how the features are settling out, I will clean
-# this up, document it, and unit test it better. -Dave
+# Once I have a sense of how the features should shake out, and a set of
+# test cases I believe in, I will refactor this entirely. -Dave
 
 
 def clsx(*args: object) -> str:
@@ -101,6 +101,15 @@ def _attrs(
                 raise ValueError(
                     f"Invalid value for 'aria' attribute: expected dict, got {type(value).__name__}"
                 )
+        elif key == "style":
+            if isinstance(value, dict):
+                return {key: "; ".join(f"{k}: {v}" for k, v in value.items())}
+            elif isinstance(value, str):
+                return {key: value}
+            else:
+                raise ValueError(
+                    f"Invalid value for 'style' attribute: expected dict or str, got {type(value).__name__}"
+                )
         elif isinstance(value, str):
             return {key: value}
         elif value is None or value is False:
@@ -142,6 +151,7 @@ def _children(
     children: list["ElementTuple | str"], bookkeep: dict[str, Interpolation]
 ) -> tuple[Element | str, ...]:
     """Substitute any bookkeeping keys in children."""
+    # TODO XXX: this satisfies the test cases but does not yet recurse.
     result: list[Element | str] = []
     for child in children:
         if isinstance(child, str):
@@ -158,15 +168,25 @@ def _children(
                             result.append(item)
                         elif isinstance(item, Template):
                             result.append(html(item))
+                        elif item is False:
+                            pass
                         else:
                             result.append(str(item))
+                elif bk_value is False:
+                    pass
                 else:
                     # TODO: should I handle more types here?
                     result.append(str(bk_value))
+            elif isinstance(child, Element):
+                if child.is_fragment:
+                    result.extend(child.children)
+                else:
+                    result.append(child)
             else:
                 result.append(child)
         else:
-            result.append(_element_from_tuple(child, bookkeep))
+            elements = list(_element_or_elements_from_tuple(child, bookkeep))
+            result.extend(elements)
     return tuple(result)
 
 
@@ -186,6 +206,8 @@ def _resolve_tag(
                 return result
             elif isinstance(result, Template):
                 return html(result)
+            elif isinstance(result, str):
+                return result
             else:
                 raise ValueError(f"Invalid tag callable result: {result!r}")
         else:
@@ -193,17 +215,28 @@ def _resolve_tag(
     return tag
 
 
-def _element_from_tuple(
+def _element_or_elements_from_tuple(
     element: ElementTuple, bookkeep: dict[str, Interpolation]
-) -> Element:
+) -> t.Iterable[Element | str]:
     attrs = _attrs(element[ELT_ATTRS], bookkeep)
     children = _children(element[ELT_CHILDREN], bookkeep)
     tag_or_elt = _resolve_tag(element[ELT_TAG], bookkeep, attrs, children)
-    return (
-        Element(tag=tag_or_elt, attrs=attrs, children=children)
-        if isinstance(tag_or_elt, str)
-        else tag_or_elt
-    )
+    if isinstance(tag_or_elt, str):
+        yield Element(tag=tag_or_elt, attrs=attrs, children=children)
+    elif tag_or_elt.is_fragment:
+        yield from tag_or_elt.children
+    else:
+        yield tag_or_elt
+
+
+def _element_from_tuple(
+    element: ElementTuple, bookkeep: dict[str, Interpolation]
+) -> Element:
+    elements = list(_element_or_elements_from_tuple(element, bookkeep))
+    if len(elements) == 1 and isinstance(elements[0], Element):
+        return elements[0]
+    else:
+        return Element(tag="", attrs={}, children=tuple(elements))
 
 
 class ElementParser(HTMLParser):

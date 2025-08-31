@@ -203,6 +203,42 @@ def test_escaping_of_interpolated_text_content():
 
 
 # --------------------------------------------------------------------------
+# Conditional rendering and control flow
+# --------------------------------------------------------------------------
+
+
+def test_conditional_rendering_with_if_else():
+    is_logged_in = True
+    user_profile = t"<span>Welcome, User!</span>"
+    login_prompt = t"<a href='/login'>Please log in</a>"
+    element = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
+
+    assert element.tag == "div"
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "span"
+    assert element.render() == "<div><span>Welcome, User!</span></div>"
+
+    is_logged_in = False
+    element = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
+    assert element.render() == '<div><a href="/login">Please log in</a></div>'
+
+
+def test_conditional_rendering_with_and():
+    show_warning = True
+    warning_message = t'<div class="warning">Warning!</div>'
+    element = html(t"<main>{show_warning and warning_message}</main>")
+
+    assert element.tag == "main"
+    assert len(element.children) == 1
+    assert element.render() == '<main><div class="warning">Warning!</div></main>'
+
+    show_warning = False
+    element = html(t"<main>{show_warning and warning_message}</main>")
+    # Assuming False renders nothing
+    assert element.render() == "<main></main>"
+
+
+# --------------------------------------------------------------------------
 # Interpolated nesting of templates and elements
 # --------------------------------------------------------------------------
 
@@ -474,6 +510,18 @@ def test_interpolated_aria_attributes():
     )
 
 
+def test_interpolated_style_attribute():
+    styles = {"color": "red", "font-weight": "bold", "font-size": "16px"}
+    element = html(t"<p style={styles}>Warning!</p>")
+    assert element.tag == "p"
+    assert len(element.attrs) == 1
+    assert element.attrs["style"] == "color: red; font-weight: bold; font-size: 16px"
+    assert (
+        element.render()
+        == '<p style="color: red; font-weight: bold; font-size: 16px">Warning!</p>'
+    )
+
+
 # --------------------------------------------------------------------------
 # Function component interpolation tests
 # --------------------------------------------------------------------------
@@ -510,3 +558,27 @@ def test_interpolated_template_component():
 def test_invalid_component_invocation():
     with pytest.raises(TypeError):
         _ = html(t"<{TemplateComponent}>Missing props</{TemplateComponent}>")  # type: ignore
+
+
+def Columns():
+    return t"""<td>Column 1</td><td>Column 2</td>"""
+
+
+def test_fragment_from_component():
+    # This test assumes that if a component returns a template that parses
+    # into multiple root elements, they are treated as a fragment.
+    element = html(t"<table><tr><{Columns} /></tr></table>")
+    assert element.tag == "table"
+    assert isinstance(element.children[0], Element)
+    assert element.children[0].tag == "tr"
+    tr_children = element.children[0].children
+    assert len(tr_children) == 2
+    assert isinstance(tr_children[0], Element)
+    assert tr_children[0].tag == "td"
+    assert tr_children[0].children[0] == "Column 1"
+    assert isinstance(tr_children[1], Element)
+    assert tr_children[1].tag == "td"
+    assert tr_children[1].children[0] == "Column 2"
+    assert (
+        element.render() == "<table><tr><td>Column 1</td><td>Column 2</td></tr></table>"
+    )
