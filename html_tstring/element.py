@@ -32,7 +32,7 @@ VOID_ELEMENTS = frozenset(
 class Element:
     """Represents an HTML element or fragment."""
 
-    tag: str
+    tag: str = ""
     attrs: t.Mapping[str, str | None] = field(default_factory=dict)
     children: t.Sequence[Element | str] = field(default_factory=tuple)
 
