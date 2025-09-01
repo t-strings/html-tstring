@@ -494,14 +494,14 @@ def test_invalid_component_invocation():
         _ = html(t"<{TemplateComponent}>Missing props</{TemplateComponent}>")  # type: ignore
 
 
-def Columns():
+def ColumnsComponent() -> Template:
     return t"""<td>Column 1</td><td>Column 2</td>"""
 
 
 def test_fragment_from_component():
     # This test assumes that if a component returns a template that parses
     # into multiple root elements, they are treated as a fragment.
-    element = html(t"<table><tr><{Columns} /></tr></table>")
+    element = html(t"<table><tr><{ColumnsComponent} /></tr></table>")
     assert element == Element(
         "table",
         children=(
