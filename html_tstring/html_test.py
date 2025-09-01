@@ -3,7 +3,7 @@ from string.templatelib import Template
 import pytest
 
 from .element import Element
-from .html import clsx, html
+from .html import SafeHTML, clsx, html
 
 # --------------------------------------------------------------------------
 # clsx tests
@@ -172,6 +172,46 @@ def test_escaping_of_interpolated_text_content():
     element = html(t"<p>Hello, {name}!</p>")
     assert element == Element("p", children=("Hello, ", "<Alice & Bob>", "!"))
     assert element.render() == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
+
+
+# --------------------------------------------------------------------------
+# Raw HTML injection tests
+# --------------------------------------------------------------------------
+
+
+def test_raw_html_injection_with_helper():
+    raw_content = SafeHTML("<strong>I am bold</strong>")
+    element = html(t"<div>{raw_content}</div>")
+    assert element == Element(
+        "div", children=(Element("strong", children=("I am bold",)),)
+    )
+    assert element.render() == "<div><strong>I am bold</strong></div>"
+
+
+def test_raw_html_injection_with_dunder_html_protocol():
+    class SafeContent:
+        def __init__(self, text):
+            self._text = text
+
+        def __html__(self):
+            # In a real app, this would come from a sanitizer or trusted source
+            return f"<em>{self._text}</em>"
+
+    content = SafeContent("emphasized")
+    element = html(t"<p>Here is some {content}.</p>")
+    assert element == Element(
+        "p", children=("Here is some ", Element("em", children=("emphasized",)), ".")
+    )
+    assert element.render() == "<p>Here is some <em>emphasized</em>.</p>"
+
+
+def test_raw_html_injection_with_format_spec():
+    raw_content = "<u>underlined</u>"
+    element = html(t"<p>This is {raw_content:safe} text.</p>")
+    assert element == Element(
+        "p", children=("This is ", Element("u", children=("underlined",)), " text.")
+    )
+    assert element.render() == "<p>This is <u>underlined</u> text.</p>"
 
 
 # --------------------------------------------------------------------------

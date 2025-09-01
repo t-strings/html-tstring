@@ -304,6 +304,27 @@ class ElementParser(HTMLParser):
         return root
 
 
+# --------------------------------------------------------------------------
+# Safe HTML support
+# --------------------------------------------------------------------------
+
+
+class SafeHTML:
+    """A wrapper to mark a string as safe for direct inclusion in HTML."""
+
+    def __init__(self, content: str):
+        self.content = content
+
+    def __html__(self) -> str:
+        return self.content
+
+    def __str__(self) -> str:
+        return self.content
+
+    def __repr__(self) -> str:
+        return f"raw({self.content!r})"
+
+
 # TODO: so much to do here, to handle different types of interpolations
 # and their contexts. Also, to cache parsed templates.
 
@@ -318,6 +339,13 @@ def html(template: Template) -> Element:
     for part in template:
         if isinstance(part, str):
             parser.feed(part)
+        elif hasattr(part.value, "__html__"):
+            # Parse the HTML, which is presumed safe
+            parser.feed(part.value.__html__())
+        # TODO XXX: better handling for format_spec AND for conversion
+        elif part.format_spec == "safe":
+            # Parse the HTML, which is presumed safe
+            parser.feed(str(part.value))
         else:
             # TODO: CONSIDER: how to choose a key that won't collide with
             # your typical t-string content?
