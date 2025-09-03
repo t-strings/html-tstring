@@ -125,13 +125,13 @@ def _attrs(
     for key, value in attrs.items():
         if value is not None:
             if value in bookkeep:
-                bk_value = bookkeep[value].value
+                bk_value = _format_interpolation(bookkeep[value])
                 result.update(_process_attr_key(key, bk_value))
             else:
                 result[key] = value
         else:
             if key in bookkeep:
-                bk_value = bookkeep[key].value
+                bk_value = _format_interpolation(bookkeep[key])
                 if isinstance(bk_value, str):
                     result[bk_value] = None
                 elif isinstance(bk_value, dict):
@@ -156,7 +156,7 @@ def _children(
     for child in children:
         if isinstance(child, str):
             if child in bookkeep:
-                bk_value = bookkeep[child].value
+                bk_value = _format_interpolation(bookkeep[child])
                 if isinstance(bk_value, (Element, str)):
                     result.append(bk_value)
                 elif isinstance(bk_value, Template):
@@ -197,7 +197,7 @@ def _resolve_tag(
     children: tuple[Element | str, ...],
 ) -> str | Element:
     if tag in bookkeep:
-        bk_value = bookkeep[tag].value
+        bk_value = _format_interpolation(bookkeep[tag])
         if isinstance(bk_value, str):
             return bk_value
         elif callable(bk_value):
@@ -329,6 +329,41 @@ class SafeHTML:
 # and their contexts. Also, to cache parsed templates.
 
 
+@t.overload
+def _convert[T](value: T, conversion: None) -> T: ...
+
+
+@t.overload
+def _convert(value: object, conversion: t.Literal["a", "r", "s"]) -> str: ...
+
+
+def _convert[T](value: T, conversion: t.Literal["a", "r", "s"] | None) -> T | str:
+    print(
+        f"_convert: value={type(value)}, conversion={conversion}, as_str={str(value)}, as_repr={repr(value)}"
+    )
+    if conversion == "a":
+        return ascii(value)
+    elif conversion == "r":
+        return repr(value)
+    elif conversion == "s":
+        return str(value)
+    else:
+        return value
+
+
+def _format(
+    value: object, format_spec: str, conversion: t.Literal["a", "r", "s"] | None
+) -> object:
+    converted = _convert(value, conversion)
+    if format_spec and format_spec != "safe":
+        return format(converted, format_spec)
+    return converted
+
+
+def _format_interpolation(interp: Interpolation) -> object:
+    return _format(interp.value, interp.format_spec, interp.conversion)
+
+
 def html(template: Template) -> Element:
     """Create an HTML element from a string."""
     count: int = 0
@@ -345,6 +380,7 @@ def html(template: Template) -> Element:
         # TODO XXX: better handling for format_spec AND for conversion
         elif part.format_spec == "safe":
             # Parse the HTML, which is presumed safe
+            # TODO CONSIDER: what should we do if conversion is set?
             parser.feed(str(part.value))
         else:
             # TODO: CONSIDER: how to choose a key that won't collide with

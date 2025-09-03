@@ -174,6 +174,30 @@ def test_escaping_of_interpolated_text_content():
     assert element.render() == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
 
 
+class Convertible:
+    def __str__(self):
+        return "string"
+
+    def __repr__(self):
+        return "repr"
+
+
+def test_conversions():
+    c = Convertible()
+    assert f"{c!s}" == "string"
+    assert f"{c!r}" == "repr"
+    element = html(t"<li>{c!s}</li><li>{c!r}</li><li>{'😊'!a}</li>")
+    print(element.render())
+    assert element == Element(
+        "",
+        children=(
+            Element("li", children=("string",)),
+            Element("li", children=("repr",)),
+            Element("li", children=("'\\U0001f60a'",)),
+        ),
+    )
+
+
 # --------------------------------------------------------------------------
 # Raw HTML injection tests
 # --------------------------------------------------------------------------
