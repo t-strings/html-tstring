@@ -1,93 +1,15 @@
 import typing as t
 from string.templatelib import Interpolation, Template
 
+from .classnames import classnames
 from .nodes import (
     Comment,
     DocumentType,
     Element,
     Fragment,
-    HasHTMLDunder,
     Node,
     Text,
 )
-
-# For performance, a mutable tuple is used while parsing.
-KIND_FRAGMENT = 0
-KIND_ELEMENT = 1
-KIND_TEXT = 2
-KIND_COMMENT = 3
-KIND_DOCTYPE = 4
-
-type NodeTuple = tuple[
-    int, str, dict[str, str | None], list["NodeTuple"], str | HasHTMLDunder | None
-]
-NODE_KIND = 0
-NODE_TAG = 1
-NODE_ATTRS = 2
-NODE_CHILDREN = 3
-NODE_TEXT = 4
-
-
-# TODO this is being put together super rapidly and so far it's a mess.
-# Once I have a sense of how the features should shake out, and a set of
-# test cases I believe in, I will refactor this entirely. -Dave
-
-
-def clsx(*args: object) -> str:
-    """
-    Construct a space-separated class string from various inputs.
-
-    Accepts strings, lists/tuples of strings, and dicts mapping class names to
-    boolean values. Ignores None and False values.
-
-    Examples:
-        clsx("btn", "btn-primary") -> "btn btn-primary"
-        clsx("btn", {"btn-primary": True, "disabled": False}) -> "btn btn-primary"
-        clsx(["btn", "btn-primary"], {"disabled": True}) -> "btn btn-primary disabled"
-        clsx("btn", None, False, "active") -> "btn active"
-
-    Args:
-        *args: Variable length argument list containing strings, lists/tuples,
-               or dicts.
-
-    Returns:
-        A single string with class names separated by spaces.
-    """
-    classes: list[str] = []
-
-    for arg in args:
-        if isinstance(arg, str):
-            classes.append(arg)
-        elif isinstance(arg, (list, tuple)):
-            classes.append(clsx(*arg))
-        elif isinstance(arg, dict):
-            for key, value in arg.items():
-                if bool(value):
-                    classes.append(key)
-        elif arg is None or isinstance(arg, bool):
-            continue
-        else:
-            raise ValueError(f"Invalid class argument type: {type(arg).__name__}")
-
-    return " ".join(stripped for c in classes if (stripped := c.strip()))
-
-
-def _clsx_single(arg: object) -> str:
-    """Helper to process a single argument to clsx()."""
-    if isinstance(arg, str):
-        return arg.strip()
-    elif isinstance(arg, (list, tuple)):
-        return clsx(*arg)
-    elif isinstance(arg, dict):
-        classes = [key for key, value in arg.items() if bool(value)]
-        return " ".join(classes)
-    elif arg is None or isinstance(arg, bool):
-        return ""
-    else:
-        raise ValueError(f"Invalid class argument type: {type(arg).__name__}")
-
-
-# TODO document, clean up, and individually unit test all helper functions here.
 
 
 def _attrs(
@@ -103,7 +25,7 @@ def _attrs(
         # we might want to map a single key in the input template to multiple
         # keys in the output element. So the return type here is a dict.
         if key == "class":
-            return {key: _clsx_single(value)}
+            return {key: classnames(value)}
         elif key == "data":
             if isinstance(value, dict):
                 return {f"data-{k}": str(v) for k, v in value.items()}

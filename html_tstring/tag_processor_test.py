@@ -2,84 +2,8 @@ from string.templatelib import Template
 
 import pytest
 
-from .html import SafeHTML, clsx, html
 from .nodes import Element, Fragment, Text
-
-# --------------------------------------------------------------------------
-# clsx tests
-# --------------------------------------------------------------------------
-
-
-def test_clsx_empty():
-    assert clsx() == ""
-
-
-def test_clsx_strings():
-    assert clsx("btn", "btn-primary") == "btn btn-primary"
-
-
-def test_clsx_strings_strip():
-    assert clsx("  btn  ", " btn-primary ") == "btn btn-primary"
-
-
-def test_cslx_empty_strings():
-    assert clsx("", "btn", "", "btn-primary", "") == "btn btn-primary"
-
-
-def test_clsx_lists_and_tuples():
-    assert (
-        clsx(["btn", "btn-primary"], ("active", "disabled"))
-        == "btn btn-primary active disabled"
-    )
-
-
-def test_clsx_dicts():
-    assert (
-        clsx(
-            "btn",
-            {"btn-primary": True, "disabled": False, "active": True, "shown": "yes"},
-        )
-        == "btn btn-primary active shown"
-    )
-
-
-def test_clsx_mixed_inputs():
-    assert (
-        clsx(
-            "btn",
-            ["btn-primary", "active"],
-            {"disabled": True, "hidden": False},
-            ("extra",),
-        )
-        == "btn btn-primary active disabled extra"
-    )
-
-
-def test_clsx_ignores_none_and_false():
-    assert (
-        clsx("btn", None, False, "active", {"hidden": None, "visible": True})
-        == "btn active visible"
-    )
-
-
-def test_clsx_raises_type_error_on_invalid_input():
-    with pytest.raises(ValueError):
-        clsx(123)
-
-    with pytest.raises(ValueError):
-        clsx(["btn", 456])
-
-
-def test_clsx_kitchen_sink():
-    assert (
-        clsx(
-            "foo",
-            [1 and "bar", {"baz": False, "bat": None}, ["hello", ["world"]]],
-            "cya",
-        )
-        == "foo bar hello world cya"
-    )
-
+from .tag_processor import SafeHTML, html
 
 # --------------------------------------------------------------------------
 # Basic HTML parsing tests
