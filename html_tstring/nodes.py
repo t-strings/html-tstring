@@ -24,6 +24,10 @@ VOID_ELEMENTS = frozenset(
 )
 
 
+CDATA_CONTENT_ELEMENTS = frozenset(["script", "style"])
+RCDATA_CONTENT_ELEMENTS = frozenset(["textarea", "title"])
+CONTENT_ELEMENTS = CDATA_CONTENT_ELEMENTS | RCDATA_CONTENT_ELEMENTS
+
 # TODO: add a pretty-printer for nodes for debugging
 # TODO: consider how significant whitespace is handled from t-string to nodes
 
@@ -36,7 +40,7 @@ class HasHTMLDunder(t.Protocol):
 type HTMLDunder = t.Callable[[], str]
 
 
-@dataclass(frozen=True)
+@dataclass
 class Node(HasHTMLDunder):
     def __html__(self) -> str:
         """Return the HTML representation of the node."""
@@ -44,7 +48,7 @@ class Node(HasHTMLDunder):
         return str(self)
 
 
-@dataclass(frozen=True)
+@dataclass
 class Text(Node):
     # Django's `SafeString` and Markupsafe/Jinja2's `Markup` both inherit
     # from `str`, but that is not a requirement for the `__html__` dunder.
@@ -56,19 +60,25 @@ class Text(Node):
             return self.text.__html__()
         return escape(self.text, quote=False)
 
+    def _as_unescaped(self) -> str:
+        """Return the text as-is, without escaping. For internal use only."""
+        if isinstance(self.text, HasHTMLDunder):
+            return self.text.__html__()
+        return self.text
+
     def __str__(self) -> str:
         return self._cached_str
 
 
-@dataclass(frozen=True)
+@dataclass
 class Fragment(Node):
-    children: t.Sequence[Node] = field(default_factory=tuple)
+    children: t.Sequence[Node] = field(default_factory=list)
 
     def __str__(self) -> str:
         return "".join(str(child) for child in self.children)
 
 
-@dataclass(frozen=True)
+@dataclass
 class Comment(Node):
     text: str
 
@@ -76,7 +86,7 @@ class Comment(Node):
         return f"<!--{self.text}-->"
 
 
-@dataclass(frozen=True)
+@dataclass
 class DocumentType(Node):
     text: str = "html"
 
@@ -84,11 +94,11 @@ class DocumentType(Node):
         return f"<!DOCTYPE {self.text}>"
 
 
-@dataclass(frozen=True)
+@dataclass
 class Element(Node):
     tag: str
     attrs: t.Mapping[str, str | None] = field(default_factory=dict)
-    children: t.Sequence[Node] = field(default_factory=tuple)
+    children: t.Sequence[Node] = field(default_factory=list)
 
     def __post_init__(self):
         """Ensure all preconditions are met."""
@@ -113,5 +123,12 @@ class Element(Node):
             return f"<{self.tag}{attrs_str} />"
         if not self.children:
             return f"<{self.tag}{attrs_str}></{self.tag}>"
-        children_str = "".join(str(child) for child in self.children)
+        if self.tag in CONTENT_ELEMENTS:
+            # Content elements should not escape their content
+            children_str = "".join(
+                child._as_unescaped() if isinstance(child, Text) else str(child)
+                for child in self.children
+            )
+        else:
+            children_str = "".join(str(child) for child in self.children)
         return f"<{self.tag}{attrs_str}>{children_str}</{self.tag}>"
