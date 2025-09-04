@@ -2,13 +2,32 @@ import typing as t
 from html.parser import HTMLParser
 from string.templatelib import Interpolation, Template
 
-from .element import VOID_ELEMENTS, Element
+from .nodes import (
+    VOID_ELEMENTS,
+    Comment,
+    DocumentType,
+    Element,
+    Fragment,
+    HasHTMLDunder,
+    Node,
+    Text,
+)
 
 # For performance, a mutable tuple is used while parsing.
-type ElementTuple = tuple[str, dict[str, str | None], list["ElementTuple | str"]]
-ELT_TAG = 0
-ELT_ATTRS = 1
-ELT_CHILDREN = 2
+KIND_FRAGMENT = 0
+KIND_ELEMENT = 1
+KIND_TEXT = 2
+KIND_COMMENT = 3
+KIND_DOCTYPE = 4
+
+type NodeTuple = tuple[
+    int, str, dict[str, str | None], list["NodeTuple"], str | HasHTMLDunder | None
+]
+NODE_KIND = 0
+NODE_TAG = 1
+NODE_ATTRS = 2
+NODE_CHILDREN = 3
+NODE_TEXT = 4
 
 
 # TODO this is being put together super rapidly and so far it's a mess.
@@ -148,44 +167,43 @@ def _attrs(
 
 
 def _children(
-    children: list["ElementTuple | str"], bookkeep: dict[str, Interpolation]
-) -> tuple[Element | str, ...]:
+    children: list[NodeTuple], bookkeep: dict[str, Interpolation]
+) -> tuple[Node, ...]:
     """Substitute any bookkeeping keys in children."""
     # TODO XXX: this satisfies the test cases but does not yet recurse.
-    result: list[Element | str] = []
+    result: list[Node] = []
     for child in children:
         if isinstance(child, str):
             if child in bookkeep:
                 bk_value = _format_interpolation(bookkeep[child])
-                if isinstance(bk_value, (Element, str)):
+                if isinstance(bk_value, (Element, Text)):
                     result.append(bk_value)
                 elif isinstance(bk_value, Template):
                     result.append(html(bk_value))
                 elif isinstance(bk_value, (list, tuple)):
                     # TODO XXX this should recurse
                     for item in bk_value:
-                        if isinstance(item, (Element, str)):
+                        if isinstance(item, (Element, Text)):
                             result.append(item)
                         elif isinstance(item, Template):
                             result.append(html(item))
                         elif item is False:
                             pass
                         else:
-                            result.append(str(item))
+                            result.append(Text(str(item)))
                 elif bk_value is False:
                     pass
                 else:
                     # TODO: should I handle more types here?
-                    result.append(str(bk_value))
+                    result.append(Text(str(bk_value)))
+            elif isinstance(child, Fragment):
+                result.extend(child.children)
             elif isinstance(child, Element):
-                if child.is_fragment:
-                    result.extend(child.children)
-                else:
-                    result.append(child)
-            else:
                 result.append(child)
+            else:
+                result.append(Text(child))
         else:
-            elements = list(_element_or_elements_from_tuple(child, bookkeep))
+            elements = list(_node_or_nodes_from_tuple(child, bookkeep))
             result.extend(elements)
     return tuple(result)
 
@@ -194,8 +212,8 @@ def _resolve_tag(
     tag: str,
     bookkeep: dict[str, Interpolation],
     attrs: dict[str, str | None],
-    children: tuple[Element | str, ...],
-) -> str | Element:
+    children: tuple[Node, ...],
+) -> str | Node:
     if tag in bookkeep:
         bk_value = _format_interpolation(bookkeep[tag])
         if isinstance(bk_value, str):
@@ -215,41 +233,67 @@ def _resolve_tag(
     return tag
 
 
-def _element_or_elements_from_tuple(
-    element: ElementTuple, bookkeep: dict[str, Interpolation]
-) -> t.Iterable[Element | str]:
-    attrs = _attrs(element[ELT_ATTRS], bookkeep)
-    children = _children(element[ELT_CHILDREN], bookkeep)
-    tag_or_elt = _resolve_tag(element[ELT_TAG], bookkeep, attrs, children)
-    if isinstance(tag_or_elt, str):
-        yield Element(tag=tag_or_elt, attrs=attrs, children=children)
-    elif tag_or_elt.is_fragment:
-        yield from tag_or_elt.children
+def _node_or_nodes_from_tuple(
+    node: NodeTuple, bookkeep: dict[str, Interpolation]
+) -> t.Iterable[Node]:
+    if node[NODE_KIND] == KIND_TEXT:
+        text = node[NODE_TEXT]
+        assert text is not None
+        if text in bookkeep:
+            bk_value = _format_interpolation(bookkeep[str(text)].value)
+            yield Text(str(bk_value))
+        else:
+            yield Text(text)
+        return
+    elif node[NODE_KIND] == KIND_COMMENT:
+        text = node[NODE_TEXT]
+        # TODO: XXX handle __html__ here?
+        assert isinstance(text, str)
+        yield Comment(text)
+        return
+    elif node[NODE_KIND] == KIND_DOCTYPE:
+        text = node[NODE_TEXT]
+        # TODO: XXX handle __html__ here?
+        assert isinstance(text, str) or text is None
+        yield DocumentType(text or "html")
+        return
+    elif node[NODE_KIND] not in (KIND_ELEMENT, KIND_FRAGMENT):
+        raise ValueError(f"Invalid node kind: {node[NODE_KIND]!r}")
+    attrs = _attrs(node[NODE_ATTRS], bookkeep)
+    children = _children(node[NODE_CHILDREN], bookkeep)
+    tag_or_node = _resolve_tag(node[NODE_TAG], bookkeep, attrs, children)
+    if isinstance(tag_or_node, str):
+        if tag_or_node == "":
+            # Fragment
+            yield Fragment(children=children)
+        else:
+            yield Element(tag=tag_or_node, attrs=attrs, children=children)
+    elif isinstance(tag_or_node, Fragment):
+        yield from tag_or_node.children
     else:
-        yield tag_or_elt
+        yield tag_or_node
 
 
-def _element_from_tuple(
-    element: ElementTuple, bookkeep: dict[str, Interpolation]
-) -> Element:
-    elements = list(_element_or_elements_from_tuple(element, bookkeep))
-    if len(elements) == 1 and isinstance(elements[0], Element):
-        return elements[0]
+def _node_from_tuple(node: NodeTuple, bookkeep: dict[str, Interpolation]) -> Node:
+    nodes = list(_node_or_nodes_from_tuple(node, bookkeep))
+    print("HERE ARE THE NODES: ", nodes)
+    if len(nodes) == 1:
+        return nodes[0]
     else:
-        return Element(tag="", attrs={}, children=tuple(elements))
+        return Fragment(children=tuple(nodes))
 
 
 class ElementParser(HTMLParser):
-    stack: list[ElementTuple]
+    stack: list[NodeTuple]
 
     def __init__(self):
         super().__init__()
-        self.stack = [("", {}, [])]
+        self.stack = [(KIND_FRAGMENT, "", {}, [], None)]
 
     def handle_starttag(
         self, tag: str, attrs: t.Sequence[tuple[str, str | None]]
     ) -> None:
-        element = (tag, dict(attrs), [])
+        element = (KIND_ELEMENT, tag, dict(attrs), [], None)
         self.stack.append(element)
 
         # Unfortunately, Python's built-in HTMLParser has inconsistent behavior
@@ -270,8 +314,8 @@ class ElementParser(HTMLParser):
             # Special case to handle void elements that are not self-closed aka
             # cpython #69445.
             if tag in VOID_ELEMENTS:
-                children = self.stack[0][ELT_CHILDREN]
-                if isinstance(children[-1], tuple) and children[-1][ELT_TAG] == tag:
+                children = self.stack[0][NODE_CHILDREN]
+                if isinstance(children[-1], tuple) and children[-1][NODE_TAG] == tag:
                     # The last child is the void element we just added.
                     return
             raise ValueError(
@@ -279,27 +323,37 @@ class ElementParser(HTMLParser):
             )
 
         element = self.stack.pop()
-        if element[ELT_TAG] != tag:
+        if element[NODE_TAG] != tag:
             raise ValueError(
-                f"Mismatched closing tag </{tag}> for <{element[ELT_TAG]}>."
+                f"Mismatched closing tag </{tag}> for <{element[NODE_TAG]}>."
             )
 
         self.append_child(element)
 
     def handle_data(self, data: str) -> None:
-        self.append_child(data)
+        print("Handling data:", data)
+        text = (KIND_TEXT, "", {}, [], data)
+        self.append_child(text)
 
-    def append_child(self, child: "ElementTuple | str") -> None:
-        self.stack[-1][ELT_CHILDREN].append(child)
+    def append_child(self, child: NodeTuple) -> None:
+        self.stack[-1][NODE_CHILDREN].append(child)
 
-    def get_root(self) -> ElementTuple:
+    def get_root(self) -> NodeTuple:
         if len(self.stack) != 1:
             raise ValueError("Invalid HTML structure: unclosed tags remain.")
 
         root = self.stack[0]
 
-        if len(root[ELT_CHILDREN]) == 1 and isinstance(root[ELT_CHILDREN][0], tuple):
-            return t.cast(ElementTuple, root[ELT_CHILDREN][0])
+        assert root[NODE_KIND] == KIND_FRAGMENT
+        print(root)
+
+        if len(root[NODE_CHILDREN]) == 1:
+            print("Single root element detected.")
+            print(root)
+            return root[NODE_CHILDREN][0]
+
+        if len(root[NODE_CHILDREN]) == 0:
+            return (KIND_TEXT, "", {}, [], "")
 
         return root
 
@@ -364,15 +418,19 @@ def _format_interpolation(interp: Interpolation) -> object:
     return _format(interp.value, interp.format_spec, interp.conversion)
 
 
-def html(template: Template) -> Element:
+def html(template: Template) -> Node:
     """Create an HTML element from a string."""
+    # TODO: pick a better prefix that is less likely to collide
+    _prefix = "ts-bk-"
     count: int = 0
     callables: dict[t.Callable, str] = {}
     bookkeep: dict[str, Interpolation] = {}
 
     parser = ElementParser()
+    print("HERE I AM")
     for part in template:
         if isinstance(part, str):
+            print(f"FEEDING STRING: '{part}'")
             parser.feed(part)
         elif hasattr(part.value, "__html__"):
             # Parse the HTML, which is presumed safe
@@ -396,4 +454,4 @@ def html(template: Template) -> Element:
             parser.feed(key)
     parser.close()
     root = parser.get_root()
-    return _element_from_tuple(root, bookkeep)
+    return _node_from_tuple(root, bookkeep)

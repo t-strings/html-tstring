@@ -2,8 +2,8 @@ from string.templatelib import Template
 
 import pytest
 
-from .element import Element
 from .html import SafeHTML, clsx, html
+from .nodes import Element, Fragment, Text
 
 # --------------------------------------------------------------------------
 # clsx tests
@@ -87,36 +87,34 @@ def test_clsx_kitchen_sink():
 
 
 def test_parse_empty():
-    element = html(t"")
-    assert element == Element()
-    assert element.render() == ""
+    node = html(t"")
+    assert node == Text("")
+    assert str(node) == ""
 
 
 def test_parse_text():
-    element = html(t"Hello, world!")
-    assert element == Element("", {}, ("Hello, world!",))
-    assert element.render() == "Hello, world!"
+    node = html(t"Hello, world!")
+    assert node == Text("Hello, world!")
+    assert str(node) == "Hello, world!"
 
 
 def test_parse_void_element():
-    element = html(t"<br>")
-    assert element == Element("br")
-    assert element.render() == "<br />"
+    node = html(t"<br>")
+    assert node == Element("br")
+    assert str(node) == "<br />"
 
 
 def test_parse_void_element_self_closed():
-    element = html(t"<br />")
-    assert element == Element("br")
-    assert element.render() == "<br />"
+    node = html(t"<br />")
+    assert node == Element("br")
+    assert str(node) == "<br />"
 
 
 def test_parse_chain_of_void_elements():
     # Make sure our handling of CPython issue #69445 is reasonable.
-    element = html(t"<br><hr><img src='image.png' /><br /><hr>")
-    assert element == Element(
-        "",
-        {},
-        (
+    node = html(t"<br><hr><img src='image.png' /><br /><hr>")
+    assert node == Fragment(
+        children=(
             Element("br"),
             Element("hr"),
             Element("img", attrs={"src": "image.png"}),
@@ -124,35 +122,35 @@ def test_parse_chain_of_void_elements():
             Element("hr"),
         ),
     )
-    assert element.render() == '<br /><hr /><img src="image.png" /><br /><hr />'
+    assert str(node) == '<br /><hr /><img src="image.png" /><br /><hr />'
 
 
 def test_parse_element_with_text():
-    element = html(t"<p>Hello, world!</p>")
-    assert element == Element("p", children=("Hello, world!",))
-    assert element.render() == "<p>Hello, world!</p>"
+    node = html(t"<p>Hello, world!</p>")
+    assert node == Element("p", children=(Text("Hello, world!"),))
+    assert str(node) == "<p>Hello, world!</p>"
 
 
 def test_parse_element_with_attributes():
-    element = html(t'<a href="https://example.com" target="_blank">Link</a>')
-    assert element == Element(
+    node = html(t'<a href="https://example.com" target="_blank">Link</a>')
+    assert node == Element(
         "a",
         attrs={"href": "https://example.com", "target": "_blank"},
-        children=("Link",),
+        children=(Text("Link"),),
     )
-    assert element.render() == '<a href="https://example.com" target="_blank">Link</a>'
+    assert str(node) == '<a href="https://example.com" target="_blank">Link</a>'
 
 
 def test_parse_nested_elements():
-    element = html(t"<div><p>Hello</p><p>World</p></div>")
-    assert element == Element(
+    node = html(t"<div><p>Hello</p><p>World</p></div>")
+    assert node == Element(
         "div",
         children=(
-            Element("p", children=("Hello",)),
-            Element("p", children=("World",)),
+            Element("p", children=(Text("Hello"),)),
+            Element("p", children=(Text("World"),)),
         ),
     )
-    assert element.render() == "<div><p>Hello</p><p>World</p></div>"
+    assert str(node) == "<div><p>Hello</p><p>World</p></div>"
 
 
 # --------------------------------------------------------------------------
@@ -162,16 +160,18 @@ def test_parse_nested_elements():
 
 def text_interpolated_text_content():
     name = "Alice"
-    element = html(t"<p>Hello, {name}!</p>")
-    assert element == Element("p", children=("Hello, ", "Alice", "!"))
-    assert element.render() == "<p>Hello, Alice!</p>"
+    node = html(t"<p>Hello, {name}!</p>")
+    assert node == Element("p", children=(Text("Hello, "), Text("Alice"), Text("!")))
+    assert str(node) == "<p>Hello, Alice!</p>"
 
 
 def test_escaping_of_interpolated_text_content():
     name = "<Alice & Bob>"
-    element = html(t"<p>Hello, {name}!</p>")
-    assert element == Element("p", children=("Hello, ", "<Alice & Bob>", "!"))
-    assert element.render() == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
+    node = html(t"<p>Hello, {name}!</p>")
+    assert node == Element(
+        "p", children=(Text("Hello, "), Text("<Alice & Bob>"), Text("!"))
+    )
+    assert str(node) == "<p>Hello, &lt;Alice &amp; Bob&gt;!</p>"
 
 
 class Convertible:
@@ -186,14 +186,13 @@ def test_conversions():
     c = Convertible()
     assert f"{c!s}" == "string"
     assert f"{c!r}" == "repr"
-    element = html(t"<li>{c!s}</li><li>{c!r}</li><li>{'😊'!a}</li>")
-    print(element.render())
-    assert element == Element(
+    node = html(t"<li>{c!s}</li><li>{c!r}</li><li>{'😊'!a}</li>")
+    assert node == Element(
         "",
         children=(
-            Element("li", children=("string",)),
-            Element("li", children=("repr",)),
-            Element("li", children=("'\\U0001f60a'",)),
+            Element("li", children=(Text("string"),)),
+            Element("li", children=(Text("repr"),)),
+            Element("li", children=(Text("'\\U0001f60a'"),)),
         ),
     )
 
@@ -205,11 +204,11 @@ def test_conversions():
 
 def test_raw_html_injection_with_helper():
     raw_content = SafeHTML("<strong>I am bold</strong>")
-    element = html(t"<div>{raw_content}</div>")
-    assert element == Element(
-        "div", children=(Element("strong", children=("I am bold",)),)
+    node = html(t"<div>{raw_content}</div>")
+    assert node == Element(
+        "div", children=(Element("strong", children=(Text("I am bold"),)),)
     )
-    assert element.render() == "<div><strong>I am bold</strong></div>"
+    assert str(node) == "<div><strong>I am bold</strong></div>"
 
 
 def test_raw_html_injection_with_dunder_html_protocol():
@@ -222,20 +221,26 @@ def test_raw_html_injection_with_dunder_html_protocol():
             return f"<em>{self._text}</em>"
 
     content = SafeContent("emphasized")
-    element = html(t"<p>Here is some {content}.</p>")
-    assert element == Element(
-        "p", children=("Here is some ", Element("em", children=("emphasized",)), ".")
+    node = html(t"<p>Here is some {content}.</p>")
+    assert node == Element(
+        "p", children=(Text("Here is some "), Text(content), Text("."))
     )
-    assert element.render() == "<p>Here is some <em>emphasized</em>.</p>"
+    assert str(node) == "<p>Here is some <em>emphasized</em>.</p>"
 
 
 def test_raw_html_injection_with_format_spec():
     raw_content = "<u>underlined</u>"
-    element = html(t"<p>This is {raw_content:safe} text.</p>")
-    assert element == Element(
-        "p", children=("This is ", Element("u", children=("underlined",)), " text.")
+    node = html(t"<p>This is {raw_content:safe} text.</p>")
+    # TODO XXX: this is wrong; raw_content should be wrapped in Text
+    assert node == Element(
+        "p",
+        children=(
+            Text("This is "),
+            Element("u", children=(Text("underlined"),)),
+            Text(" text."),
+        ),
     )
-    assert element.render() == "<p>This is <u>underlined</u> text.</p>"
+    assert str(node) == "<p>This is <u>underlined</u> text.</p>"
 
 
 # --------------------------------------------------------------------------
@@ -247,33 +252,35 @@ def test_conditional_rendering_with_if_else():
     is_logged_in = True
     user_profile = t"<span>Welcome, User!</span>"
     login_prompt = t"<a href='/login'>Please log in</a>"
-    element = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
+    node = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
 
-    assert element == Element(
-        "div", children=(Element("span", children=("Welcome, User!",)),)
+    assert node == Element(
+        "div", children=(Element("span", children=(Text("Welcome, User!"),)),)
     )
-    assert element.render() == "<div><span>Welcome, User!</span></div>"
+    assert str(node) == "<div><span>Welcome, User!</span></div>"
 
     is_logged_in = False
-    element = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
-    assert element.render() == '<div><a href="/login">Please log in</a></div>'
+    node = html(t"<div>{user_profile if is_logged_in else login_prompt}</div>")
+    assert str(node) == '<div><a href="/login">Please log in</a></div>'
 
 
 def test_conditional_rendering_with_and():
     show_warning = True
     warning_message = t'<div class="warning">Warning!</div>'
-    element = html(t"<main>{show_warning and warning_message}</main>")
+    node = html(t"<main>{show_warning and warning_message}</main>")
 
-    assert element == Element(
+    assert node == Element(
         "main",
-        children=(Element("div", attrs={"class": "warning"}, children=("Warning!",)),),
+        children=(
+            Element("div", attrs={"class": "warning"}, children=(Text("Warning!"),)),
+        ),
     )
-    assert element.render() == '<main><div class="warning">Warning!</div></main>'
+    assert str(node) == '<main><div class="warning">Warning!</div></main>'
 
     show_warning = False
-    element = html(t"<main>{show_warning and warning_message}</main>")
+    node = html(t"<main>{show_warning and warning_message}</main>")
     # Assuming False renders nothing
-    assert element.render() == "<main></main>"
+    assert str(node) == "<main></main>"
 
 
 # --------------------------------------------------------------------------
@@ -283,36 +290,39 @@ def test_conditional_rendering_with_and():
 
 def test_interpolated_template_content():
     child = t"<span>Child</span>"
-    element = html(t"<div>{child}</div>")
-    assert element == Element("div", children=(html(child),))
-    assert element.render() == "<div><span>Child</span></div>"
+    node = html(t"<div>{child}</div>")
+    assert node == Element("div", children=(html(child),))
+    assert str(node) == "<div><span>Child</span></div>"
 
 
 def test_interpolated_element_content():
     child = html(t"<span>Child</span>")
-    element = html(t"<div>{child}</div>")
-    assert element == Element("div", children=(child,))
-    assert element.render() == "<div><span>Child</span></div>"
+    node = html(t"<div>{child}</div>")
+    assert node == Element("div", children=(child,))
+    assert str(node) == "<div><span>Child</span></div>"
 
 
 def test_interpolated_nonstring_content():
     number = 42
-    element = html(t"<p>The answer is {number}.</p>")
-    assert element == Element("p", children=("The answer is ", "42", "."))
-    assert element.render() == "<p>The answer is 42.</p>"
+    node = html(t"<p>The answer is {number}.</p>")
+    assert node == Element(
+        "p", children=(Text("The answer is "), Text("42"), Text("."))
+    )
+    assert str(node) == "<p>The answer is 42.</p>"
 
 
 def test_list_items():
     items = ["Apple", "Banana", "Cherry"]
-    element = html(t"<ul>{[t'<li>{item}</li>' for item in items]}</ul>")
-    assert element.tag == "ul"
-    assert len(element.attrs) == 0
-    assert element.children == (
-        Element("li", children=("Apple",)),
-        Element("li", children=("Banana",)),
-        Element("li", children=("Cherry",)),
+    node = html(t"<ul>{[t'<li>{item}</li>' for item in items]}</ul>")
+    assert node == Element(
+        "ul",
+        children=(
+            Element("li", children=(Text("Apple"),)),
+            Element("li", children=(Text("Banana"),)),
+            Element("li", children=(Text("Cherry"),)),
+        ),
     )
-    assert element.render() == "<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>"
+    assert str(node) == "<ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>"
 
 
 def test_nested_list_items():
@@ -321,20 +331,20 @@ def test_nested_list_items():
     inner = ["apple", "banana", "cherry"]
     inner_items = [t"<li>{item}</li>" for item in inner]
     outer_items = [t"<li>{category}<ul>{inner_items}</ul></li>" for category in outer]
-    element = html(t"<ul>{outer_items}</ul>")
-    assert element == Element(
+    node = html(t"<ul>{outer_items}</ul>")
+    assert node == Element(
         "ul",
         children=(
             Element(
                 "li",
                 children=(
-                    "fruit",
+                    Text("fruit"),
                     Element(
                         "ul",
                         children=(
-                            Element("li", children=("apple",)),
-                            Element("li", children=("banana",)),
-                            Element("li", children=("cherry",)),
+                            Element("li", children=(Text("apple"),)),
+                            Element("li", children=(Text("banana"),)),
+                            Element("li", children=(Text("cherry"),)),
                         ),
                     ),
                 ),
@@ -342,13 +352,13 @@ def test_nested_list_items():
             Element(
                 "li",
                 children=(
-                    "more fruit",
+                    Text("more fruit"),
                     Element(
                         "ul",
                         children=(
-                            Element("li", children=("apple",)),
-                            Element("li", children=("banana",)),
-                            Element("li", children=("cherry",)),
+                            Element("li", children=(Text("apple"),)),
+                            Element("li", children=(Text("banana"),)),
+                            Element("li", children=(Text("cherry"),)),
                         ),
                     ),
                 ),
@@ -356,7 +366,7 @@ def test_nested_list_items():
         ),
     )
     assert (
-        element.render()
+        str(node)
         == "<ul><li>fruit<ul><li>apple</li><li>banana</li><li>cherry</li></ul></li><li>more fruit<ul><li>apple</li><li>banana</li><li>cherry</li></ul></li></ul>"
     )
 
@@ -368,73 +378,73 @@ def test_nested_list_items():
 
 def test_interpolated_attribute_value():
     url = "https://example.com/"
-    element = html(t'<a href="{url}">Link</a>')
-    assert element == Element(
-        "a", attrs={"href": "https://example.com/"}, children=("Link",)
+    node = html(t'<a href="{url}">Link</a>')
+    assert node == Element(
+        "a", attrs={"href": "https://example.com/"}, children=(Text("Link"),)
     )
-    assert element.render() == '<a href="https://example.com/">Link</a>'
+    assert str(node) == '<a href="https://example.com/">Link</a>'
 
 
 def test_escaping_of_interpolated_attribute_value():
     url = 'https://example.com/?q="test"&lang=en'
-    element = html(t'<a href="{url}">Link</a>')
-    assert element == Element(
+    node = html(t'<a href="{url}">Link</a>')
+    assert node == Element(
         "a",
         attrs={"href": 'https://example.com/?q="test"&lang=en'},
-        children=("Link",),
+        children=(Text("Link"),),
     )
     assert (
-        element.render()
+        str(node)
         == '<a href="https://example.com/?q=&quot;test&quot;&amp;lang=en">Link</a>'
     )
 
 
 def test_interpolated_unquoted_attribute_value():
     id = "roquefort"
-    element = html(t"<div id={id}>Cheese</div>")
-    assert element == Element("div", attrs={"id": "roquefort"}, children=("Cheese",))
-    assert element.render() == '<div id="roquefort">Cheese</div>'
+    node = html(t"<div id={id}>Cheese</div>")
+    assert node == Element("div", attrs={"id": "roquefort"}, children=(Text("Cheese"),))
+    assert str(node) == '<div id="roquefort">Cheese</div>'
 
 
 def test_interpolated_attribute_value_true():
     disabled = True
-    element = html(t"<button disabled={disabled}>Click me</button>")
-    assert element == Element(
-        "button", attrs={"disabled": None}, children=("Click me",)
+    node = html(t"<button disabled={disabled}>Click me</button>")
+    assert node == Element(
+        "button", attrs={"disabled": None}, children=(Text("Click me"),)
     )
-    assert element.render() == "<button disabled>Click me</button>"
+    assert str(node) == "<button disabled>Click me</button>"
 
 
 def test_interpolated_attribute_value_falsy():
     disabled = False
     crumpled = None
-    element = html(t"<button disabled={disabled} crumpled={crumpled}>Click me</button>")
-    assert element == Element("button", attrs={}, children=("Click me",))
-    assert element.render() == "<button>Click me</button>"
+    node = html(t"<button disabled={disabled} crumpled={crumpled}>Click me</button>")
+    assert node == Element("button", attrs={}, children=(Text("Click me"),))
+    assert str(node) == "<button>Click me</button>"
 
 
 def test_interpolated_attribute_spread_dict():
     attrs = {"href": "https://example.com/", "target": "_blank"}
-    element = html(t"<a {attrs}>Link</a>")
-    assert element == Element(
+    node = html(t"<a {attrs}>Link</a>")
+    assert node == Element(
         "a",
         attrs={"href": "https://example.com/", "target": "_blank"},
-        children=("Link",),
+        children=(Text("Link"),),
     )
-    assert element.render() == '<a href="https://example.com/" target="_blank">Link</a>'
+    assert str(node) == '<a href="https://example.com/" target="_blank">Link</a>'
 
 
 def test_interpolated_mixed_attribute_values_and_spread_dict():
     attrs = {"href": "https://example.com/", "id": "link1"}
     target = "_blank"
-    element = html(t'<a {attrs} target="{target}">Link</a>')
-    assert element == Element(
+    node = html(t'<a {attrs} target="{target}">Link</a>')
+    assert node == Element(
         "a",
         attrs={"href": "https://example.com/", "id": "link1", "target": "_blank"},
-        children=("Link",),
+        children=(Text("Link"),),
     )
     assert (
-        element.render()
+        str(node)
         == '<a href="https://example.com/" id="link1" target="_blank">Link</a>'
     )
 
@@ -442,77 +452,72 @@ def test_interpolated_mixed_attribute_values_and_spread_dict():
 def test_multiple_attribute_spread_dicts():
     attrs1 = {"href": "https://example.com/", "id": "overwrtten"}
     attrs2 = {"target": "_blank", "id": "link1"}
-    element = html(t"<a {attrs1} {attrs2}>Link</a>")
-    assert element == Element(
+    node = html(t"<a {attrs1} {attrs2}>Link</a>")
+    assert node == Element(
         "a",
         attrs={"href": "https://example.com/", "id": "link1", "target": "_blank"},
-        children=("Link",),
+        children=(Text("Link"),),
     )
     assert (
-        element.render()
+        str(node)
         == '<a href="https://example.com/" id="link1" target="_blank">Link</a>'
     )
 
 
 def test_interpolated_class_attribute():
     classes = ["btn", "btn-primary", False and "disabled", None, {"active": True}]
-    element = html(t'<button class="{classes}">Click me</button>')
-    assert element == Element(
-        "button", attrs={"class": "btn btn-primary active"}, children=("Click me",)
+    node = html(t'<button class="{classes}">Click me</button>')
+    assert node == Element(
+        "button",
+        attrs={"class": "btn btn-primary active"},
+        children=(Text("Click me"),),
     )
-    assert (
-        element.render() == '<button class="btn btn-primary active">Click me</button>'
-    )
+    assert str(node) == '<button class="btn btn-primary active">Click me</button>'
 
 
 def test_interpolated_attribute_spread_with_class_attribute():
     attrs = {"id": "button1", "class": ["btn", "btn-primary"]}
-    element = html(t"<button {attrs}>Click me</button>")
-    assert element == Element(
+    node = html(t"<button {attrs}>Click me</button>")
+    assert node == Element(
         "button",
         attrs={"id": "button1", "class": "btn btn-primary"},
-        children=("Click me",),
+        children=(Text("Click me"),),
     )
-    assert (
-        element.render()
-        == '<button id="button1" class="btn btn-primary">Click me</button>'
-    )
+    assert str(node) == '<button id="button1" class="btn btn-primary">Click me</button>'
 
 
 def test_interpolated_data_attributes():
     data = {"user-id": 123, "role": "admin"}
-    element = html(t"<div data={data}>User Info</div>")
-    assert element == Element(
+    node = html(t"<div data={data}>User Info</div>")
+    assert node == Element(
         "div",
         attrs={"data-user-id": "123", "data-role": "admin"},
-        children=("User Info",),
+        children=(Text("User Info"),),
     )
-    assert (
-        element.render() == '<div data-user-id="123" data-role="admin">User Info</div>'
-    )
+    assert str(node) == '<div data-user-id="123" data-role="admin">User Info</div>'
 
 
 def test_interpolated_aria_attributes():
     aria = {"label": "Close", "hidden": True}
-    element = html(t"<button aria={aria}>X</button>")
-    assert element == Element(
-        "button", attrs={"aria-label": "Close", "aria-hidden": "True"}, children=("X",)
+    node = html(t"<button aria={aria}>X</button>")
+    assert node == Element(
+        "button",
+        attrs={"aria-label": "Close", "aria-hidden": "True"},
+        children=(Text("X"),),
     )
-    assert (
-        element.render() == '<button aria-label="Close" aria-hidden="True">X</button>'
-    )
+    assert str(node) == '<button aria-label="Close" aria-hidden="True">X</button>'
 
 
 def test_interpolated_style_attribute():
     styles = {"color": "red", "font-weight": "bold", "font-size": "16px"}
-    element = html(t"<p style={styles}>Warning!</p>")
-    assert element == Element(
+    node = html(t"<p style={styles}>Warning!</p>")
+    assert node == Element(
         "p",
         attrs={"style": "color: red; font-weight: bold; font-size: 16px"},
-        children=("Warning!",),
+        children=(Text("Warning!"),),
     )
     assert (
-        element.render()
+        str(node)
         == '<p style="color: red; font-weight: bold; font-size: 16px">Warning!</p>'
     )
 
@@ -534,10 +539,10 @@ def TemplateComponent(
 
 
 def test_interpolated_template_component():
-    element = html(
+    node = html(
         t'<{TemplateComponent} first=1 second={99} third="comp1" class="my-comp">Hello, Component!</{TemplateComponent}>'
     )
-    assert element == Element(
+    assert node == Element(
         "div",
         attrs={
             "id": "comp1",
@@ -545,10 +550,10 @@ def test_interpolated_template_component():
             "data-second": "99",
             "class": "my-comp",
         },
-        children=("Component: ", "Hello, Component!"),
+        children=(Text("Component: "), Text("Hello, Component!")),
     )
     assert (
-        element.render()
+        str(node)
         == '<div id="comp1" data-first="1" data-second="99" class="my-comp">Component: Hello, Component!</div>'
     )
 
@@ -565,19 +570,17 @@ def ColumnsComponent() -> Template:
 def test_fragment_from_component():
     # This test assumes that if a component returns a template that parses
     # into multiple root elements, they are treated as a fragment.
-    element = html(t"<table><tr><{ColumnsComponent} /></tr></table>")
-    assert element == Element(
+    node = html(t"<table><tr><{ColumnsComponent} /></tr></table>")
+    assert node == Element(
         "table",
         children=(
             Element(
                 "tr",
                 children=(
-                    Element("td", children=("Column 1",)),
-                    Element("td", children=("Column 2",)),
+                    Element("td", children=(Text("Column 1"),)),
+                    Element("td", children=(Text("Column 2"),)),
                 ),
             ),
         ),
     )
-    assert (
-        element.render() == "<table><tr><td>Column 1</td><td>Column 2</td></tr></table>"
-    )
+    assert str(node) == "<table><tr><td>Column 1</td><td>Column 2</td></tr></table>"
