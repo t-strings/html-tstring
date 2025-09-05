@@ -1,4 +1,7 @@
+import random
+import string
 import typing as t
+from functools import lru_cache
 from string.templatelib import Interpolation, Template
 
 from .classnames import classnames
@@ -10,6 +13,7 @@ from .nodes import (
     Node,
     Text,
 )
+from .parser import parse_html
 
 
 def _attrs(
@@ -160,7 +164,7 @@ def _node_or_nodes_from_tuple(
         text = node[NODE_TEXT]
         assert text is not None
         if text in bookkeep:
-            as_interpolation = bookkeep[str(text)]
+            as_interpolation = bookkeep[text]
             print("HERE IS THE INTERPOLATION: ", as_interpolation)
             bk_value = _format_interpolation(bookkeep[str(text)].value)
             print("VALUE OF bk_value: ", bk_value)
@@ -231,75 +235,49 @@ class SafeHTML:
 # and their contexts. Also, to cache parsed templates.
 
 
-@t.overload
-def _convert[T](value: T, conversion: None) -> T: ...
+_PLACEHOLDER_PREFIX = f"t🐍-{''.join(random.choices(string.ascii_lowercase, k=4))}-"
+_PP_LEN = len(_PLACEHOLDER_PREFIX)
 
 
-@t.overload
-def _convert(value: object, conversion: t.Literal["a", "r", "s"]) -> str: ...
+def _placeholder(i: int) -> str:
+    """Generate a placeholder for the i-th interpolation."""
+    return f"{_PLACEHOLDER_PREFIX}{i}"
 
 
-def _convert[T](value: T, conversion: t.Literal["a", "r", "s"] | None) -> T | str:
-    print(
-        f"_convert: value={type(value)}, conversion={conversion}, as_str={str(value)}, as_repr={repr(value)}"
-    )
-    if conversion == "a":
-        return ascii(value)
-    elif conversion == "r":
-        return repr(value)
-    elif conversion == "s":
-        return str(value)
-    else:
-        return value
+def _placholder_index(s: str) -> int:
+    """Extract the index from a placeholder string."""
+    return int(s[_PP_LEN:])
 
 
-def _format(
-    value: object, format_spec: str, conversion: t.Literal["a", "r", "s"] | None
-) -> object:
-    converted = _convert(value, conversion)
-    if format_spec and format_spec != "safe":
-        return format(converted, format_spec)
-    return converted
+def _instrument(strings: t.Sequence[str]) -> str:
+    """
+    Join the strings with placeholders in between where interpolations go.
+
+    This is used to prepare the template string for parsing, so that we can
+    later substitute the actual interpolated values into the parse tree.
+
+    The placeholders are chosen to be unlikely to collide with typical HTML
+    content.
+    """
+    count = len(strings)
+
+    def _placeholder_or_final(i: int, s: str) -> str:
+        """Return the string with a placeholder if not the last one."""
+        # There are always count-1 placeholders between count strings.
+        return f"{s}{_placeholder(i)}" if i < count - 1 else s
+
+    return "".join(_placeholder_or_final(i, s) for i, s in enumerate(strings))
 
 
-def _format_interpolation(interp: Interpolation) -> object:
-    return _format(interp.value, interp.format_spec, interp.conversion)
+@lru_cache()
+def _instrument_and_parse(strings: tuple[str, ...]) -> Node:
+    instrumented = _instrument(strings)
+    return parse_html(instrumented)
 
 
 def html(template: Template) -> Node:
     """Create an HTML element from a string."""
-    # TODO: pick a better prefix that is less likely to collide
-    _prefix = "ts-bk-"
-    count: int = 0
-    callables: dict[t.Callable, str] = {}
-    bookkeep: dict[str, Interpolation] = {}
-
-    parser = ElementParser()
-    print("HERE I AM")
-    for part in template:
-        if isinstance(part, str):
-            print(f"FEEDING STRING: '{part}'")
-            parser.feed(part)
-        elif hasattr(part.value, "__html__"):
-            # Parse the HTML, which is presumed safe
-            parser.feed(part.value.__html__())
-        # TODO XXX: better handling for format_spec AND for conversion
-        elif part.format_spec == "safe":
-            # Parse the HTML, which is presumed safe
-            # TODO CONSIDER: what should we do if conversion is set?
-            parser.feed(str(part.value))
-        else:
-            # TODO: CONSIDER: how to choose a key that won't collide with
-            # your typical t-string content?
-            key = f"ts-bk-{count}"
-            # TODO: CONSIDER: do we want to broaden this key reuse to
-            # non-callables too? Or is it not worth the complexity?
-            if callable(part.value):
-                key = callables.get(part.value, key)
-                callables[part.value] = key
-            bookkeep[key] = part
-            count += 1
-            parser.feed(key)
-    parser.close()
-    root = parser.get_root()
-    return _node_from_tuple(root, bookkeep)
+    # Parse the HTML, returning a tree of nodes with placeholders
+    # where interpolations go.
+    placeholder_node = _instrument_and_parse(template.strings)
+    return _substitute_interpolations(placeholder_node, template.interpolations)

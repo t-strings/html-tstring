@@ -3,7 +3,7 @@ from string.templatelib import Template
 import pytest
 
 from .nodes import Element, Fragment, Text
-from .tag_processor import SafeHTML, html
+from .processor import SafeHTML, html
 
 # --------------------------------------------------------------------------
 # Basic HTML parsing tests
