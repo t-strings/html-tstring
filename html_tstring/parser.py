@@ -86,7 +86,7 @@ class NodeParser(HTMLParser):
     def append_child(self, child: Node) -> None:
         parent = self.get_parent()
         # We *know* our parser is using lists for children, so this cast is safe.
-        t.cast(list[Node], parent.children).append(child)
+        parent.children.append(child)
 
     def close(self) -> None:
         if self.stack:

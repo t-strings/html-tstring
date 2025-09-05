@@ -32,7 +32,6 @@ CONTENT_ELEMENTS = CDATA_CONTENT_ELEMENTS | RCDATA_CONTENT_ELEMENTS
 # TODO: consider how significant whitespace is handled from t-string to nodes
 
 
-@t.runtime_checkable
 class HasHTMLDunder(t.Protocol):
     def __html__(self) -> str: ...
 
@@ -40,15 +39,15 @@ class HasHTMLDunder(t.Protocol):
 type HTMLDunder = t.Callable[[], str]
 
 
-@dataclass
-class Node(HasHTMLDunder):
+@dataclass(slots=True)
+class Node:
     def __html__(self) -> str:
         """Return the HTML representation of the node."""
         # By default, just return the string representation
         return str(self)
 
 
-@dataclass
+@dataclass(slots=False)
 class Text(Node):
     # Django's `SafeString` and Markupsafe/Jinja2's `Markup` both inherit
     # from `str`, but that is not a requirement for the `__html__` dunder.
@@ -56,29 +55,29 @@ class Text(Node):
 
     @cached_property
     def _cached_str(self) -> str:
-        if isinstance(self.text, HasHTMLDunder):
-            return self.text.__html__()
-        return escape(self.text, quote=False)
+        if hasattr(self.text, "__html__"):
+            return t.cast(HasHTMLDunder, self.text).__html__()
+        return escape(t.cast(str, self.text), quote=False)
 
     def _as_unescaped(self) -> str:
         """Return the text as-is, without escaping. For internal use only."""
-        if isinstance(self.text, HasHTMLDunder):
-            return self.text.__html__()
-        return self.text
+        if hasattr(self.text, "__html__"):
+            return t.cast(HasHTMLDunder, self.text).__html__()
+        return t.cast(str, self.text)
 
     def __str__(self) -> str:
         return self._cached_str
 
 
-@dataclass
+@dataclass(slots=True)
 class Fragment(Node):
-    children: t.Sequence[Node] = field(default_factory=list)
+    children: list[Node] = field(default_factory=list)
 
     def __str__(self) -> str:
         return "".join(str(child) for child in self.children)
 
 
-@dataclass
+@dataclass(slots=True)
 class Comment(Node):
     text: str
 
@@ -86,7 +85,7 @@ class Comment(Node):
         return f"<!--{self.text}-->"
 
 
-@dataclass
+@dataclass(slots=True)
 class DocumentType(Node):
     text: str = "html"
 
@@ -94,11 +93,11 @@ class DocumentType(Node):
         return f"<!DOCTYPE {self.text}>"
 
 
-@dataclass
+@dataclass(slots=True)
 class Element(Node):
     tag: str
-    attrs: t.Mapping[str, str | None] = field(default_factory=dict)
-    children: t.Sequence[Node] = field(default_factory=list)
+    attrs: dict[str, str | None] = field(default_factory=dict)
+    children: list[Node] = field(default_factory=list)
 
     def __post_init__(self):
         """Ensure all preconditions are met."""

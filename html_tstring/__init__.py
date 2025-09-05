@@ -1,14 +1,17 @@
-from .nodes import Comment, DocumentType, Element, Fragment, Text
-from .processor import SafeHTML, html
+from markupsafe import Markup, escape
 
-# TODO: don't use SafeHTML; adopt markupsafe
+from .nodes import Comment, DocumentType, Element, Fragment, Text
+from .processor import html
+
+# We consider `Markup` and `escape` to be part of this module's public API
 
 __all__ = [
-    "SafeHTML",
-    "html",
-    "Element",
-    "Text",
-    "Fragment",
     "Comment",
     "DocumentType",
+    "Element",
+    "escape",
+    "Fragment",
+    "html",
+    "Markup",
+    "Text",
 ]
