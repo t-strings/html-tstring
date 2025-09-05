@@ -111,7 +111,22 @@ class NodeParser(HTMLParser):
 
 
 def parse_html(input_html: str) -> Node:
+    """Parse an HTML string into a Node tree."""
     parser = NodeParser()
     parser.feed(input_html)
+    parser.close()
+    return parser.get_node()
+
+
+def parse_html_iter(input_html: t.Iterable[str]) -> Node:
+    """
+    Parse a sequence of HTML string chunks into a Node tree.
+
+    This is particularly useful if your sequence keeps separate text nodes
+    that you wish to preserve intact.
+    """
+    parser = NodeParser()
+    for chunk in input_html:
+        parser.feed(chunk)
     parser.close()
     return parser.get_node()

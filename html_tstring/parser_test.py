@@ -1,7 +1,7 @@
 import pytest
 
 from .nodes import Comment, DocumentType, Element, Fragment, Text
-from .parser import parse_html
+from .parser import parse_html, parse_html_iter
 
 
 def test_parse_empty():
@@ -163,3 +163,23 @@ def test_parse_mismatched_tags():
 def test_parse_unclosed_tag():
     with pytest.raises(ValueError):
         _ = parse_html("<div>Unclosed")
+
+
+def test_parse_html_iter_preserves_chunks():
+    chunks = [
+        "<div>",
+        "Hello ",
+        "there, ",
+        "<span>world</span>",
+        "!</div>",
+    ]
+    node = parse_html_iter(chunks)
+    assert node == Element(
+        "div",
+        children=[
+            Text("Hello "),
+            Text("there, "),
+            Element("span", children=[Text("world")]),
+            Text("!"),
+        ],
+    )

@@ -1,17 +1,35 @@
 import random
 import string
 import typing as t
+from collections.abc import Iterable
 from functools import lru_cache
 from string.templatelib import Interpolation, Template
 
-from .nodes import (
-    Element,
-    Fragment,
-    Node,
-    Text,
-)
-from .parser import parse_html
-from .utils import format_interpolation
+from markupsafe import Markup
+
+from .nodes import Element, Fragment, HasHTMLDunder, Node, Text
+from .parser import parse_html_iter
+from .utils import format_interpolation as base_format_interpolation
+
+# --------------------------------------------------------------------------
+# Value formatting
+# --------------------------------------------------------------------------
+
+
+def _format_safe(value: object, format_spec: str) -> str:
+    assert format_spec == "safe"
+    return Markup(value)
+
+
+CUSTOM_FORMATTERS = (("safe", _format_safe),)
+
+
+def format_interpolation(interpolation: Interpolation) -> object:
+    return base_format_interpolation(
+        interpolation,
+        formatters=CUSTOM_FORMATTERS,
+    )
+
 
 # --------------------------------------------------------------------------
 # Instrumentation, Parsing, and Caching
@@ -31,7 +49,7 @@ def _placholder_index(s: str) -> int:
     return int(s[_PP_LEN:])
 
 
-def _instrument(strings: t.Sequence[str]) -> str:
+def _instrument(strings: tuple[str, ...]) -> t.Iterable[str]:
     """
     Join the strings with placeholders in between where interpolations go.
 
@@ -46,12 +64,11 @@ def _instrument(strings: t.Sequence[str]) -> str:
     # TODO: special case callables() so that we use the same placeholder
     # to open *and* close tags.
 
-    def _placeholder_or_final(i: int, s: str) -> str:
-        """Return the string with a placeholder if not the last one."""
+    for i, s in enumerate(strings):
+        yield s
         # There are always count-1 placeholders between count strings.
-        return f"{s}{_placeholder(i)}" if i < count - 1 else s
-
-    return "".join(_placeholder_or_final(i, s) for i, s in enumerate(strings))
+        if i < count - 1:
+            yield _placeholder(i)
 
 
 @lru_cache()
@@ -62,7 +79,7 @@ def _instrument_and_parse(strings: tuple[str, ...]) -> Node:
     The result is cached to avoid re-parsing the same template multiple times.
     """
     instrumented = _instrument(strings)
-    return parse_html(instrumented)
+    return parse_html_iter(instrumented)
 
 
 # --------------------------------------------------------------------------
@@ -89,6 +106,33 @@ def _substitute_attrs(
     return new_attrs
 
 
+def _substitute_and_flatten_children(
+    children: t.Iterable[Node], interpolations: tuple[Interpolation, ...]
+) -> list[Node]:
+    """Substitute placeholders in a list of children and flatten any fragments."""
+    new_children: list[Node] = []
+    for child in children:
+        substituted = _substitute_node(child, interpolations)
+        if isinstance(substituted, Fragment):
+            # This can happen if an interpolation results in a Fragment, for
+            # instance if it is iterable.
+            new_children.extend(substituted.children)
+        else:
+            new_children.append(substituted)
+    return new_children
+
+
+def _node_from_value(value: object) -> Node:
+    """Convert a value to a Node, if possible."""
+    # This is a bit of a hack, but it lets us handle Markup and
+    # other objects that implement __html__ without special-casing them here.
+    # We use a Text node to wrap the value, then parse it back out.
+    # This is not the most efficient, but it is simple and works.
+    node = Text(_placeholder(0))
+    interpolations = (Interpolation(value, "", None, ""),)
+    return _substitute_node(node, interpolations)
+
+
 def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) -> Node:
     match p_node:
         case Text(text) if str(text).startswith(_PLACEHOLDER_PREFIX):
@@ -102,14 +146,21 @@ def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) ->
                     return value
                 case Template():
                     return html(value)
+                case HasHTMLDunder():
+                    return Text(value)
+                case False:
+                    return Text("")
+                case Iterable():
+                    children = [_node_from_value(v) for v in value]
+                    return Fragment(children=children)
                 case _:
-                    raise ValueError(f"Invalid interpolation value: {value!r}")
+                    return Text(str(value))
         case Element(tag=tag, attrs=attrs, children=children):
             new_attrs = _substitute_attrs(attrs, interpolations)
-            new_children = [_substitute_node(c, interpolations) for c in children]
+            new_children = _substitute_and_flatten_children(children, interpolations)
             return Element(tag=tag, attrs=new_attrs, children=new_children)
         case Fragment(children=children):
-            new_children = [_substitute_node(c, interpolations) for c in children]
+            new_children = _substitute_and_flatten_children(children, interpolations)
             return Fragment(children=new_children)
         case _:
             return p_node

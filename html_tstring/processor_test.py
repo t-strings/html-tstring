@@ -119,8 +119,7 @@ def test_conversions():
     assert f"{c!s}" == "string"
     assert f"{c!r}" == "repr"
     node = html(t"<li>{c!s}</li><li>{c!r}</li><li>{'😊'!a}</li>")
-    assert node == Element(
-        "",
+    assert node == Fragment(
         children=[
             Element("li", children=[Text("string")]),
             Element("li", children=[Text("repr")]),
@@ -137,9 +136,7 @@ def test_conversions():
 def test_raw_html_injection_with_helper():
     raw_content = Markup("<strong>I am bold</strong>")
     node = html(t"<div>{raw_content}</div>")
-    assert node == Element(
-        "div", children=[Element("strong", children=[Text("I am bold")])]
-    )
+    assert node == Element("div", children=[Text(text=raw_content)])
     assert str(node) == "<div><strong>I am bold</strong></div>"
 
 
@@ -163,12 +160,11 @@ def test_raw_html_injection_with_dunder_html_protocol():
 def test_raw_html_injection_with_format_spec():
     raw_content = "<u>underlined</u>"
     node = html(t"<p>This is {raw_content:safe} text.</p>")
-    # TODO XXX: this is wrong; raw_content should be wrapped in Text
     assert node == Element(
         "p",
         children=[
             Text("This is "),
-            Element("u", children=[Text("underlined")]),
+            Text(Markup(raw_content)),
             Text(" text."),
         ],
     )

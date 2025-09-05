@@ -32,6 +32,7 @@ CONTENT_ELEMENTS = CDATA_CONTENT_ELEMENTS | RCDATA_CONTENT_ELEMENTS
 # TODO: consider how significant whitespace is handled from t-string to nodes
 
 
+@t.runtime_checkable
 class HasHTMLDunder(t.Protocol):
     def __html__(self) -> str: ...
 
@@ -55,15 +56,15 @@ class Text(Node):
 
     @cached_property
     def _cached_str(self) -> str:
-        if hasattr(self.text, "__html__"):
-            return t.cast(HasHTMLDunder, self.text).__html__()
+        if isinstance(self.text, HasHTMLDunder):
+            return self.text.__html__()
         return escape(t.cast(str, self.text), quote=False)
 
     def _as_unescaped(self) -> str:
         """Return the text as-is, without escaping. For internal use only."""
-        if hasattr(self.text, "__html__"):
-            return t.cast(HasHTMLDunder, self.text).__html__()
-        return t.cast(str, self.text)
+        if isinstance(self.text, HasHTMLDunder):
+            return self.text.__html__()
+        return self.text
 
     def __str__(self) -> str:
         return self._cached_str
