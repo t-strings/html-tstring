@@ -430,10 +430,10 @@ def test_interpolated_aria_attributes():
     node = html(t"<button aria={aria}>X</button>")
     assert node == Element(
         "button",
-        attrs={"aria-label": "Close", "aria-hidden": None},
+        attrs={"aria-label": "Close", "aria-hidden": "true"},
         children=[Text("X")],
     )
-    assert str(node) == '<button aria-label="Close" aria-hidden>X</button>'
+    assert str(node) == '<button aria-label="Close" aria-hidden="true">X</button>'
 
 
 def test_interpolated_style_attribute():

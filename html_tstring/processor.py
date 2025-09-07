@@ -98,26 +98,28 @@ def _force_dict(value: t.Any, *, kind: str) -> dict:
         ) from None
 
 
-def _substitute_attrs_dict(
-    value: object, *, kind: str
-) -> t.Iterable[tuple[str, str | None]]:
-    """Substitute attributes based on the interpolated value being a dict."""
-    d = _force_dict(value, kind=kind)
-    for sub_k, sub_v in d.items():
-        if sub_v is True:
-            yield f"{kind}-{sub_k}", None
-        elif sub_v not in (False, None):
-            yield f"{kind}-{sub_k}", str(sub_v)
-
-
 def _substitute_aria_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
     """Produce aria-* attributes based on the interpolated value for "aria"."""
-    return _substitute_attrs_dict(value, kind="aria")
+    d = _force_dict(value, kind="aria")
+    for sub_k, sub_v in d.items():
+        if sub_v is True:
+            yield f"aria-{sub_k}", "true"
+        elif sub_v is False:
+            yield f"aria-{sub_k}", "false"
+        elif sub_v is None:
+            pass
+        else:
+            yield f"aria-{sub_k}", str(sub_v)
 
 
 def _substitute_data_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
     """Produce data-* attributes based on the interpolated value for "data"."""
-    return _substitute_attrs_dict(value, kind="data")
+    d = _force_dict(value, kind="data")
+    for sub_k, sub_v in d.items():
+        if sub_v is True:
+            yield f"data-{sub_k}", None
+        elif sub_v not in (False, None):
+            yield f"data-{sub_k}", str(sub_v)
 
 
 def _substitute_class_attr(value: object) -> t.Iterable[tuple[str, str | None]]:
