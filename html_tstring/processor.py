@@ -50,7 +50,9 @@ def _placholder_index(s: str) -> int:
     return int(s[_PP_LEN:])
 
 
-def _instrument(strings: tuple[str, ...]) -> t.Iterable[str]:
+def _instrument(
+    strings: tuple[str, ...], callable_ids: tuple[int | None, ...]
+) -> t.Iterable[str]:
     """
     Join the strings with placeholders in between where interpolations go.
 
@@ -62,25 +64,60 @@ def _instrument(strings: tuple[str, ...]) -> t.Iterable[str]:
     """
     count = len(strings)
 
-    # TODO: special case callables() so that we use the same placeholder
-    # to open *and* close tags.
+    callable_placeholders: dict[int, str] = {}
 
     for i, s in enumerate(strings):
         yield s
         # There are always count-1 placeholders between count strings.
         if i < count - 1:
-            yield _placeholder(i)
+            # Special case for component callables: if the interpolation
+            # is a callable, we need to make sure that any matching closing
+            # tag uses the same placeholder.
+            callable_id = callable_ids[i]
+            if callable_id is not None:
+                # This interpolation is a callable, so we need to make sure
+                # that any matching closing tag uses the same placeholder.
+                if callable_id not in callable_placeholders:
+                    callable_placeholders[callable_id] = _placeholder(i)
+                yield callable_placeholders[callable_id]
+            else:
+                yield _placeholder(i)
 
 
 @lru_cache()
-def _instrument_and_parse(strings: tuple[str, ...]) -> Node:
+def _instrument_and_parse_internal(
+    strings: tuple[str, ...], callable_ids: tuple[int | None, ...]
+) -> Node:
     """
     Instrument the strings and parse the resulting HTML.
 
     The result is cached to avoid re-parsing the same template multiple times.
     """
-    instrumented = _instrument(strings)
+    instrumented = _instrument(strings, callable_ids)
     return parse_html_iter(instrumented)
+
+
+def _callable_id(value: object) -> int | None:
+    """Return a unique identifier for a callable, or None if not callable."""
+    return id(value) if callable(value) else None
+
+
+def _instrument_and_parse(template: Template) -> Node:
+    """Instrument and parse a template, returning a tree of Nodes."""
+    # This is a thin wrapper around the cached internal function that does the
+    # actual work. This exists to handle the syntax we've settled on for
+    # component invocation, namely that callables are directly included as
+    # interpolations both in the open *and* the close tags. We need to make
+    # sure that matching tags... match!
+    #
+    # If we used `tdom`'s approach of component closing tags of <//> then we
+    # wouldn't have to do this. But I worry that tdom's syntax is harder to read
+    # (it's easy to miss the closing tag) and may prove unfamiliar for
+    # users coming from other templating systems.
+    callable_ids = tuple(
+        _callable_id(interpolation.value) for interpolation in template.interpolations
+    )
+    return _instrument_and_parse_internal(template.strings, callable_ids)
 
 
 # --------------------------------------------------------------------------
@@ -181,38 +218,13 @@ def _substitute_attr(
     # General handling for all other attributes:
     match value:
         case str():
-            yield (key, str(value))
+            yield (key, value)
         case True:
             yield (key, None)
         case False | None:
             pass
-        case dict() as d:
-            for sub_k, sub_v in d.items():
-                if sub_v is True:
-                    yield sub_k, None
-                elif sub_v not in (False, None):
-                    yield sub_k, str(sub_v)
-        case Iterable() as it:
-            for item in it:
-                match item:
-                    case tuple() if len(item) == 2:
-                        sub_k, sub_v = item
-                        if sub_v is True:
-                            yield sub_k, None
-                        elif sub_v not in (False, None):
-                            yield sub_k, str(sub_v)
-                    case str() | Markup():
-                        yield str(item), None
-                    case _:
-                        raise TypeError(
-                            f"Cannot use {type(item).__name__} as attribute "
-                            f"key-value pair in iterable for attribute '{key}'"
-                        )
         case _:
-            raise TypeError(
-                f"Cannot use {type(value).__name__} as attribute value for "
-                f"attribute '{key}'"
-            )
+            yield (key, str(value))
 
 
 def _substitute_attrs(
@@ -279,6 +291,36 @@ def _node_from_value(value: object) -> Node:
             return Text(str(value))
 
 
+def _invoke_component(
+    tag: str,
+    new_attrs: dict[str, str | None],
+    new_children: list[Node],
+    interpolations: tuple[Interpolation, ...],
+) -> Node:
+    """Substitute a component invocation based on the corresponding interpolations."""
+    index = _placholder_index(tag)
+    interpolation = interpolations[index]
+    value = format_interpolation(interpolation)
+    if not callable(value):
+        raise TypeError(
+            f"Expected a callable for component invocation, got {type(value).__name__}"
+        )
+    # Call the component and return the resulting node
+    result = value(*new_children, **new_attrs)
+    match result:
+        case Node():
+            return result
+        case Template():
+            return html(result)
+        case HasHTMLDunder() | str():
+            return Text(result)
+        case _:
+            raise TypeError(
+                f"Component callable must return a Node, Template, str, or "
+                f"HasHTMLDunder, got {type(result).__name__}"
+            )
+
+
 def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) -> Node:
     """Substitute placeholders in a node based on the corresponding interpolations."""
     match p_node:
@@ -290,7 +332,10 @@ def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) ->
         case Element(tag=tag, attrs=attrs, children=children):
             new_attrs = _substitute_attrs(attrs, interpolations)
             new_children = _substitute_and_flatten_children(children, interpolations)
-            return Element(tag=tag, attrs=new_attrs, children=new_children)
+            if tag.startswith(_PLACEHOLDER_PREFIX):
+                return _invoke_component(tag, new_attrs, new_children, interpolations)
+            else:
+                return Element(tag=tag, attrs=new_attrs, children=new_children)
         case Fragment(children=children):
             new_children = _substitute_and_flatten_children(children, interpolations)
             return Fragment(children=new_children)
@@ -307,5 +352,5 @@ def html(template: Template) -> Node:
     """Parse a t-string and return a tree of Nodes."""
     # Parse the HTML, returning a tree of nodes with placeholders
     # where interpolations go.
-    p_node = _instrument_and_parse(template.strings)
+    p_node = _instrument_and_parse(template)
     return _substitute_node(p_node, template.interpolations)

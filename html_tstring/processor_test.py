@@ -456,7 +456,7 @@ def test_interpolated_style_attribute():
 
 
 def TemplateComponent(
-    *children: Element | str, first: int, second: int, third: str, **props: str
+    *children: Element | str, first: int, second: int, third: str, **props: str | None
 ) -> Template:
     attrs = {
         "id": third,
