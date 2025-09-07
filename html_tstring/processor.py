@@ -87,20 +87,109 @@ def _instrument_and_parse(strings: tuple[str, ...]) -> Node:
 # --------------------------------------------------------------------------
 
 
+def _substitute_attr(
+    key: str,
+    value: object,
+) -> t.Iterable[tuple[str, str | None]]:
+    """
+    Substitute a single attribute based on its key and the interpolated value.
+
+    A single parsed attribute with a placeholder may result in multiple
+    attributes in the final output, for instance if the value is a dict or
+    iterable of key-value pairs. Likewise, a value of False will result in
+    the attribute being omitted entirely; nothing is yielded in that case.
+    """
+    match value:
+        case str():
+            yield (key, str(value))
+        case True:
+            yield (key, None)
+        case False | None:
+            pass
+        case dict() as d:
+            for sub_k, sub_v in d.items():
+                if sub_v is True:
+                    yield sub_k, None
+                elif sub_v not in (False, None):
+                    yield sub_k, str(sub_v)
+        case Iterable() as it:
+            for item in it:
+                match item:
+                    case tuple() if len(item) == 2:
+                        sub_k, sub_v = item
+                        if sub_v is True:
+                            yield sub_k, None
+                        elif sub_v not in (False, None):
+                            yield sub_k, str(sub_v)
+                    case str() | Markup():
+                        yield str(item), None
+                    case _:
+                        raise TypeError(
+                            f"Cannot use {type(item).__name__} as attribute "
+                            f"key-value pair in iterable for attribute '{key}'"
+                        )
+        case _:
+            raise TypeError(
+                f"Cannot use {type(value).__name__} as attribute value for "
+                f"attribute '{key}'"
+            )
+
+
+def _substitute_spread_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """
+    Substitute a spread attribute based on the interpolated value.
+
+    A spread attribute is one where the key is a placeholder, indicating that
+    the entire attribute set should be replaced by the interpolated value.
+    The value must be a dict or iterable of key-value pairs.
+    """
+    match value:
+        case dict() as d:
+            for sub_k, sub_v in d.items():
+                if sub_v is True:
+                    yield sub_k, None
+                elif sub_v not in (False, None):
+                    yield sub_k, str(sub_v)
+        case Iterable() as it:
+            for item in it:
+                match item:
+                    case tuple() if len(item) == 2:
+                        sub_k, sub_v = item
+                        if sub_v is True:
+                            yield sub_k, None
+                        elif sub_v not in (False, None):
+                            yield sub_k, str(sub_v)
+                    case str() | Markup():
+                        yield str(item), None
+                    case _:
+                        raise TypeError(
+                            f"Cannot use {type(item).__name__} as attribute "
+                            f"key-value pair in iterable for spread attribute"
+                        )
+        case _:
+            raise TypeError(
+                f"Cannot use {type(value).__name__} as value for spread attribute"
+            )
+
+
 def _substitute_attrs(
     attrs: dict[str, str | None], interpolations: tuple[Interpolation, ...]
 ) -> dict[str, str | None]:
+    """Substitute placeholders in attributes based on the corresponding interpolations."""
     new_attrs: dict[str, str | None] = {}
     for key, value in attrs.items():
-        if key.startswith(_PLACEHOLDER_PREFIX):
+        if value and value.startswith(_PLACEHOLDER_PREFIX):
+            index = _placholder_index(value)
+            interpolation = interpolations[index]
+            value = format_interpolation(interpolation)
+            for sub_k, sub_v in _substitute_attr(key, value):
+                new_attrs[sub_k] = sub_v
+        elif key.startswith(_PLACEHOLDER_PREFIX):
             index = _placholder_index(key)
             interpolation = interpolations[index]
             value = format_interpolation(interpolation)
-            if not isinstance(value, str):
-                raise ValueError(
-                    f"Attribute interpolation must be a string, got: {value!r}"
-                )
-            new_attrs[key] = value
+            for sub_k, sub_v in _substitute_spread_attrs(value):
+                new_attrs[sub_k] = sub_v
         else:
             new_attrs[key] = value
     return new_attrs
@@ -123,38 +212,38 @@ def _substitute_and_flatten_children(
 
 
 def _node_from_value(value: object) -> Node:
-    """Convert a value to a Node, if possible."""
-    # This is a bit of a hack, but it lets us handle Markup and
-    # other objects that implement __html__ without special-casing them here.
-    # We use a Text node to wrap the value, then parse it back out.
-    # This is not the most efficient, but it is simple and works.
-    node = Text(_placeholder(0))
-    interpolations = (Interpolation(value, "", None, ""),)
-    return _substitute_node(node, interpolations)
+    """
+    Convert an arbitrary value to a Node.
+
+    This is the primary substitution performed when replacing interpolations
+    in child content positions.
+    """
+    match value:
+        case str():
+            return Text(value)
+        case Node():
+            return value
+        case Template():
+            return html(value)
+        case HasHTMLDunder():
+            return Text(value)
+        case False:
+            return Text("")
+        case Iterable():
+            children = [_node_from_value(v) for v in value]
+            return Fragment(children=children)
+        case _:
+            return Text(str(value))
 
 
 def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) -> Node:
+    """Substitute placeholders in a node based on the corresponding interpolations."""
     match p_node:
         case Text(text) if str(text).startswith(_PLACEHOLDER_PREFIX):
             index = _placholder_index(str(text))
             interpolation = interpolations[index]
             value = format_interpolation(interpolation)
-            match value:
-                case str():
-                    return Text(value)
-                case Node():
-                    return value
-                case Template():
-                    return html(value)
-                case HasHTMLDunder():
-                    return Text(value)
-                case False:
-                    return Text("")
-                case Iterable():
-                    children = [_node_from_value(v) for v in value]
-                    return Fragment(children=children)
-                case _:
-                    return Text(str(value))
+            return _node_from_value(value)
         case Element(tag=tag, attrs=attrs, children=children):
             new_attrs = _substitute_attrs(attrs, interpolations)
             new_children = _substitute_and_flatten_children(children, interpolations)
@@ -172,7 +261,7 @@ def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) ->
 
 
 def html(template: Template) -> Node:
-    """Create an HTML element from a string."""
+    """Parse a t-string and return a tree of Nodes."""
     # Parse the HTML, returning a tree of nodes with placeholders
     # where interpolations go.
     p_node = _instrument_and_parse(template.strings)
