@@ -148,6 +148,17 @@ def _substitute_spread_attrs(value: object) -> t.Iterable[tuple[str, str | None]
         yield from _substitute_attr(sub_k, sub_v)
 
 
+# A collection of custom handlers for certain attribute names that have
+# special semantics. This is in addition to the special-casing in
+# _substitute_attr() itself.
+CUSTOM_ATTR_HANDLERS = {
+    "class": _substitute_class_attr,
+    "data": _substitute_data_attrs,
+    "style": _substitute_style_attr,
+    "aria": _substitute_aria_attrs,
+}
+
+
 def _substitute_attr(
     key: str,
     value: object,
@@ -160,20 +171,10 @@ def _substitute_attr(
     iterable of key-value pairs. Likewise, a value of False will result in
     the attribute being omitted entirely; nothing is yielded in that case.
     """
-    # Special handling for certain attribute names that have special semantics:
-    match key:
-        case "class":
-            yield from _substitute_class_attr(value)
-            return
-        case "data":
-            yield from _substitute_data_attrs(value)
-            return
-        case "style":
-            yield from _substitute_style_attr(value)
-            return
-        case "aria":
-            yield from _substitute_aria_attrs(value)
-            return
+    # Special handling for certain attribute names that have special semantics
+    if custom_handler := CUSTOM_ATTR_HANDLERS.get(key):
+        yield from custom_handler(value)
+        return
 
     # General handling for all other attributes:
     match value:
