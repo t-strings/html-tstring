@@ -7,6 +7,7 @@ from string.templatelib import Interpolation, Template
 
 from markupsafe import Markup
 
+from .classnames import classnames
 from .nodes import Element, Fragment, HasHTMLDunder, Node, Text
 from .parser import parse_html_iter
 from .utils import format_interpolation as base_format_interpolation
@@ -87,6 +88,66 @@ def _instrument_and_parse(strings: tuple[str, ...]) -> Node:
 # --------------------------------------------------------------------------
 
 
+def _force_dict(value: t.Any, *, kind: str) -> dict:
+    """Try to convert a value to a dict, raising TypeError if not possible."""
+    try:
+        return dict(value)
+    except (TypeError, ValueError):
+        raise TypeError(
+            f"Cannot use {type(value).__name__} as value for {kind} attributes"
+        ) from None
+
+
+def _substitute_attrs_dict(
+    value: object, *, kind: str
+) -> t.Iterable[tuple[str, str | None]]:
+    """Substitute attributes based on the interpolated value being a dict."""
+    d = _force_dict(value, kind=kind)
+    for sub_k, sub_v in d.items():
+        if sub_v is True:
+            yield f"{kind}-{sub_k}", None
+        elif sub_v not in (False, None):
+            yield f"{kind}-{sub_k}", str(sub_v)
+
+
+def _substitute_aria_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """Produce aria-* attributes based on the interpolated value for "aria"."""
+    return _substitute_attrs_dict(value, kind="aria")
+
+
+def _substitute_data_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """Produce data-* attributes based on the interpolated value for "data"."""
+    return _substitute_attrs_dict(value, kind="data")
+
+
+def _substitute_class_attr(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """Substitute a class attribute based on the interpolated value."""
+    yield ("class", classnames(value))
+
+
+def _substitute_style_attr(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """Substitute a style attribute based on the interpolated value."""
+    try:
+        d = _force_dict(value, kind="style")
+        style_str = "; ".join(f"{k}: {v}" for k, v in d.items())
+        yield ("style", style_str)
+    except TypeError:
+        yield ("style", str(value))
+
+
+def _substitute_spread_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
+    """
+    Substitute a spread attribute based on the interpolated value.
+
+    A spread attribute is one where the key is a placeholder, indicating that
+    the entire attribute set should be replaced by the interpolated value.
+    The value must be a dict or iterable of key-value pairs.
+    """
+    d = _force_dict(value, kind="spread")
+    for sub_k, sub_v in d.items():
+        yield from _substitute_attr(sub_k, sub_v)
+
+
 def _substitute_attr(
     key: str,
     value: object,
@@ -99,6 +160,22 @@ def _substitute_attr(
     iterable of key-value pairs. Likewise, a value of False will result in
     the attribute being omitted entirely; nothing is yielded in that case.
     """
+    # Special handling for certain attribute names that have special semantics:
+    match key:
+        case "class":
+            yield from _substitute_class_attr(value)
+            return
+        case "data":
+            yield from _substitute_data_attrs(value)
+            return
+        case "style":
+            yield from _substitute_style_attr(value)
+            return
+        case "aria":
+            yield from _substitute_aria_attrs(value)
+            return
+
+    # General handling for all other attributes:
     match value:
         case str():
             yield (key, str(value))
@@ -132,43 +209,6 @@ def _substitute_attr(
             raise TypeError(
                 f"Cannot use {type(value).__name__} as attribute value for "
                 f"attribute '{key}'"
-            )
-
-
-def _substitute_spread_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
-    """
-    Substitute a spread attribute based on the interpolated value.
-
-    A spread attribute is one where the key is a placeholder, indicating that
-    the entire attribute set should be replaced by the interpolated value.
-    The value must be a dict or iterable of key-value pairs.
-    """
-    match value:
-        case dict() as d:
-            for sub_k, sub_v in d.items():
-                if sub_v is True:
-                    yield sub_k, None
-                elif sub_v not in (False, None):
-                    yield sub_k, str(sub_v)
-        case Iterable() as it:
-            for item in it:
-                match item:
-                    case tuple() if len(item) == 2:
-                        sub_k, sub_v = item
-                        if sub_v is True:
-                            yield sub_k, None
-                        elif sub_v not in (False, None):
-                            yield sub_k, str(sub_v)
-                    case str() | Markup():
-                        yield str(item), None
-                    case _:
-                        raise TypeError(
-                            f"Cannot use {type(item).__name__} as attribute "
-                            f"key-value pair in iterable for spread attribute"
-                        )
-        case _:
-            raise TypeError(
-                f"Cannot use {type(value).__name__} as value for spread attribute"
             )
 
 
