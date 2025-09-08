@@ -83,18 +83,16 @@ def _instrument(
         yield s
         # There are always count-1 placeholders between count strings.
         if i < count - 1:
+            placeholder = _placeholder(i)
+
             # Special case for component callables: if the interpolation
             # is a callable, we need to make sure that any matching closing
             # tag uses the same placeholder.
             callable_id = callable_ids[i]
-            if callable_id is not None:
-                # This interpolation is a callable, so we need to make sure
-                # that any matching closing tag uses the same placeholder.
-                if callable_id not in callable_placeholders:
-                    callable_placeholders[callable_id] = _placeholder(i)
-                yield callable_placeholders[callable_id]
-            else:
-                yield _placeholder(i)
+            if callable_id:
+                placeholder = callable_placeholders.setdefault(callable_id, placeholder)
+
+            yield placeholder
 
 
 @lru_cache()
@@ -368,4 +366,5 @@ def html(template: Template) -> Node:
     # Parse the HTML, returning a tree of nodes with placeholders
     # where interpolations go.
     p_node = _instrument_and_parse(template)
+    return _substitute_node(p_node, template.interpolations)
     return _substitute_node(p_node, template.interpolations)
