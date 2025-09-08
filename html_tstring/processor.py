@@ -77,6 +77,8 @@ def _instrument(
     """
     count = len(strings)
 
+    print("Instrumenting:", strings, callable_ids)  # DEBUG
+
     callable_placeholders: dict[int, str] = {}
 
     for i, s in enumerate(strings):
@@ -105,7 +107,9 @@ def _instrument_and_parse_internal(
     The result is cached to avoid re-parsing the same template multiple times.
     """
     instrumented = _instrument(strings, callable_ids)
-    return parse_html(instrumented)
+    i_list = list(instrumented)
+    print("Instrumented:", "".join(i_list))  # DEBUG
+    return parse_html(i_list)
 
 
 def _callable_id(value: object) -> int | None:
@@ -185,7 +189,9 @@ def _substitute_style_attr(value: object) -> t.Iterable[tuple[str, str | None]]:
         yield ("style", str(value))
 
 
-def _substitute_spread_attrs(value: object) -> t.Iterable[tuple[str, str | None]]:
+def _substitute_spread_attrs(
+    value: object,
+) -> t.Iterable[tuple[str, str | t.Callable | None]]:
     """
     Substitute a spread attribute based on the interpolated value.
 
@@ -212,7 +218,7 @@ CUSTOM_ATTR_HANDLERS = {
 def _substitute_attr(
     key: str,
     value: object,
-) -> t.Iterable[tuple[str, str | None]]:
+) -> t.Iterable[tuple[str, str | t.Callable | None]]:
     """
     Substitute a single attribute based on its key and the interpolated value.
 
@@ -234,15 +240,17 @@ def _substitute_attr(
             yield (key, None)
         case False | None:
             pass
+        case _ if callable(value):
+            yield (key, value)
         case _:
             yield (key, str(value))
 
 
 def _substitute_attrs(
     attrs: dict[str, str | None], interpolations: tuple[Interpolation, ...]
-) -> dict[str, str | None]:
+) -> dict[str, str | t.Callable | None]:
     """Substitute placeholders in attributes based on the corresponding interpolations."""
-    new_attrs: dict[str, str | None] = {}
+    new_attrs: dict[str, str | ComponentCallable | None] = {}
     for key, value in attrs.items():
         if value and value.startswith(_PLACEHOLDER_PREFIX):
             index = _placholder_index(value)
@@ -297,14 +305,20 @@ def _node_from_value(value: object) -> Node:
             children = [_node_from_value(v) for v in value]
             return Fragment(children=children)
         case HasHTMLDunder():
+            # CONSIDER: could we return a lazy Text?
             return Text(Markup(value.__html__()))
         case _:
+            # CONSIDER: could we return a lazy Text?
             return Text(str(value))
+
+
+type ComponentReturn = Node | Template | str | HasHTMLDunder
+type ComponentCallable = t.Callable[..., ComponentReturn | t.Iterable[ComponentReturn]]
 
 
 def _invoke_component(
     tag: str,
-    new_attrs: dict[str, str | None],
+    new_attrs: dict[str, str | t.Callable | None],
     new_children: list[Node],
     interpolations: tuple[Interpolation, ...],
 ) -> Node:
@@ -312,12 +326,14 @@ def _invoke_component(
     index = _placholder_index(tag)
     interpolation = interpolations[index]
     value = format_interpolation(interpolation)
+    # TODO: consider use of signature() or other approaches to validation.
     if not callable(value):
         raise TypeError(
             f"Expected a callable for component invocation, got {type(value).__name__}"
         )
     # Call the component and return the resulting node
     result = value(*new_children, **new_attrs)
+    print("RESULTIS:", result)  # DEBUG
     match result:
         case Node():
             return result
@@ -348,7 +364,10 @@ def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) ->
             if tag.startswith(_PLACEHOLDER_PREFIX):
                 return _invoke_component(tag, new_attrs, new_children, interpolations)
             else:
-                return Element(tag=tag, attrs=new_attrs, children=new_children)
+                final_attrs = {
+                    k: str(v) if v is not None else None for k, v in new_attrs.items()
+                }
+                return Element(tag=tag, attrs=final_attrs, children=new_children)
         case Fragment(children=children):
             new_children = _substitute_and_flatten_children(children, interpolations)
             return Fragment(children=new_children)
@@ -366,5 +385,4 @@ def html(template: Template) -> Node:
     # Parse the HTML, returning a tree of nodes with placeholders
     # where interpolations go.
     p_node = _instrument_and_parse(template)
-    return _substitute_node(p_node, template.interpolations)
     return _substitute_node(p_node, template.interpolations)

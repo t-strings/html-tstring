@@ -5,7 +5,7 @@ import pytest
 from markupsafe import Markup
 
 from .nodes import Element, Fragment, Node, Text
-from .processor import html
+from .processor import ComponentCallable, html
 
 # --------------------------------------------------------------------------
 # Basic HTML parsing tests
@@ -476,7 +476,7 @@ def test_interpolated_style_attribute():
 
 
 def TemplateComponent(
-    *children: Node, first: int, second: int, third: str, **attrs: t.Any
+    *children: Node, first: str, second: int, third: str, **attrs: t.Any
 ) -> Template:
     new_attrs = {
         "id": third,
@@ -532,3 +532,29 @@ def test_fragment_from_component():
         ],
     )
     assert str(node) == "<table><tr><td>Column 1</td><td>Column 2</td></tr></table>"
+
+
+def test_component_passed_as_attr_value():
+    def WrapperComponent(
+        *children: Node, another: ComponentCallable, **attrs: t.Any
+    ) -> Template:
+        print("WrapperComponent called with:", type(another), another)
+        return t"<{another} {attrs}>{children}</{another}>"
+
+    node = html(
+        t'<{WrapperComponent} another={TemplateComponent} class="wrapped" first=1 second={99} third="comp1"><p>Inside wrapper</p></{WrapperComponent}>'
+    )
+    assert node == Element(
+        "div",
+        attrs={
+            "id": "comp1",
+            "data-first": "1",
+            "data-second": "99",
+            "class": "wrapped",
+        },
+        children=[Text("Component: "), Element("p", children=[Text("Inside wrapper")])],
+    )
+    assert (
+        str(node)
+        == '<div id="comp1" data-first="1" data-second="99" class="wrapped">Component: <p>Inside wrapper</p></div>'
+    )

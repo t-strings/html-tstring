@@ -95,6 +95,7 @@ class NodeParser(HTMLParser):
 
     def get_node(self) -> Node:
         """Get the Node tree parsed from the input HTML."""
+        # CONSIDER: Should we invert things and offer streaming parsing?
         assert not self.stack, "Did you forget to call close()?"
         if len(self.root.children) > 1:
             # The parse structure results in multiple root elements, so we
