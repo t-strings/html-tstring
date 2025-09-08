@@ -1,56 +1,281 @@
 # html-tstring
 
-Tools to manipulate and render HTML using Python 3.14's t-strings.
+A 🤘 rockin' t-string HTML templating system for Python 3.14.
 
-Real documentation is forthcoming!
+## Installation
 
-What can you do today?
+Just run:
 
-1. Render HTML to an `Element` tree:
+```bash
+pip install html-tstring
+```
+
+Python 3.14 isn't out yet, but you can use [Astral's `uv`](https://docs.astral.sh/uv/) to easily try `html-tstring` in a Python 3.14 environment:
+
+```bash
+uv run --with html-tstring --python 3.14 python
+```
+
+## Usage
+
+`html-tstring` leverages Python 3.14's [new t-strings feature](https://t-strings.help/introduction.html) to provide a powerful HTML templating system that feels familiar if you've used JSX, Jinja2, or Django templates.
+
+T-strings work just like f-strings but use a `t` prefix and [create `Template` objects](https://docs.python.org/3.14/library/string.templatelib.html#template-strings) instead of strings.
+
+Once you have a `Template`, you can call this package's `html()` function to convert it into a tree of `Node` objects that represent your HTML structure. From there, you can render it to a string, manipulate it programmatically, or compose it with other templates for maximum flexibility.
+
+### Getting Started
+
+Import the `html` function and start creating templates:
 
 ```python
 from html_tstring import html
-
-template = t"<div><h1>Hello, world!</h1></div>"
-element = html(template)
-print(str(element))
-# <div><h1>Hello, world!</h1></div>
+greeting = html(t"<h1>Hello, World!</h1>")
+print(type(greeting))  # <class 'html_tstring.nodes.Element'>
+print(greeting)  # <h1>Hello, World!</h1>
 ```
 
-2. Get automatic escaping:
+### Variable Interpolation
+
+Just like f-strings, you can interpolate (substitute) variables directly into your templates:
 
 ```python
-from html_tstring import html
-
-evil = "<script>alert('Hacked!');</script>"
-template = t"<div>{evil}</div>"
-element = html(template)
-print(str(element))
-# <div>&lt;script&gt;alert('Hacked!');&lt;/script&gt;</div>
+name = "Alice"
+age = 30
+user_info = html(t"<p>Hello, {name}! You are {age} years old.</p>")
+print(user_info)  # <p>Hello, Alice! You are 30 years old.</p>
 ```
 
-3. Safely nest HTML elements:
+The `html()` function ensures that interpolated values are automatically escaped to prevent XSS attacks:
 
 ```python
-from html_tstring import html
-
-header = html(t"<header><h1>Welcome</h1></header>")
-template = t"<div>{header}<p>This is the main content.</p></div>"
-element = html(template)
-print(str(element))
-# <div><header><h1>Welcome</h1></header><p>This is the main content.</p></div>
+user_name = "<script>alert('owned')</script>"
+safe_output = html(t"<p>Hello, {user_name}!</p>")
+print(safe_output)  # <p>Hello, &lt;script&gt;alert('owned')&lt;/script&gt;!</p>
 ```
 
-4. Or, safely nest HTML templates:
+### Attribute Substitution
+
+The `html()` function provides a number of convenient ways to define HTML attributes.
+
+#### Direct Attribute Values
+
+You can place values directly in attribute positions:
 
 ```python
-from html_tstring import html
-
-header_template = t"<header><h1>Welcome</h1></header>"
-template = t"<div>{header_template}<p>This is the main content.</p></div>"
-element = html(template)
-print(str(element))
-# <div><header><h1>Welcome</h1></header><p>This is the main content.</p></div>
+url = "https://example.com"
+link = html(t'<a href="{url}">Visit our site</a>')
+# <a href="https://example.com">Visit our site</a>
 ```
 
-TODO: write more examples, convert them into tests.
+You don't _have_ to wrap your attribute values in quotes:
+
+```python
+element_id = "my-button"
+button = html(t"<button id={element_id}>Click me</button>")
+# <button id="my-button">Click me</button>
+```
+
+Boolean attributes are supported too. Just use a boolean value in the attribute position:
+
+```python
+form_button = html(t"<button disabled={True} hidden={False}>Submit</button>")
+print(form_button)
+# <button disabled>Submit</button>
+```
+
+#### The `class` Attribute
+
+The `class` attribute has special handling to make it easy to combine multiple classes from different sources. The simplest way is to provide a list of class names:
+
+```python
+classes = ["btn", "btn-primary", "active"]
+button = html(t'<button class="{classes}">Click me</button>')
+# <button class="btn btn-primary active">Click me</button>
+```
+
+For flexibility, you can also provide a list of strings, dictionaries, or a mix of both:
+
+```python
+classes = ["btn", "btn-primary", {"active": True}, None, False and "disabled"]
+button = html(t'<button class="{classes}">Click me</button>')
+# <button class="btn btn-primary active">Click me</button>
+```
+
+See the [`classnames()`](./html_tstring/classnames_test.py) helper function for more information on how class names are combined.
+
+#### The `style` Attribute
+
+In addition to strings, you can also provide a dictionary of CSS properties and values for the `style` attribute:
+
+```python
+# Style attributes from dictionaries
+styles = {"color": "red", "font-weight": "bold", "margin": "10px"}
+styled = html(t"<p style={styles}>Important text</p>")
+# <p style="color: red; font-weight: bold; margin: 10px">Important text</p>
+```
+
+#### The `data` and `aria` Attributes
+
+The `data` and `aria` attributes also have special handling to convert dictionary keys to the appropriate attribute names:
+
+```python
+data_attrs = {"user-id": 123, "role": "admin"}
+aria_attrs = {"label": "Close dialog", "hidden": True}
+element = html(t"<div data={data_attrs} aria={aria_attrs}>Content</div>")
+# <div data-user-id="123" data-role="admin" aria-label="Close dialog"
+# aria-hidden="true">Content</div>
+```
+
+Note that boolean values in `aria` attributes are converted to `"true"` or `"false"` as per [the ARIA specification](https://www.w3.org/TR/wai-aria-1.2/).
+
+#### Attribute Spreading
+
+It's possible to specify multiple attributes at once by using a dictionary and spreading it into an element using curly braces:
+
+```python
+attrs = {"href": "https://example.com", "target": "_blank"}
+link = html(t"<a {attrs}>External link</a>")
+# <a href="https://example.com" target="_blank">External link</a>
+```
+
+You can also combine spreading with individual attributes:
+
+```python
+base_attrs = {"id": "my-link"}
+target = "_blank"
+link = html(t'<a {base_attrs} target="{target}">Link</a>')
+# <a id="my-link" target="_blank">Link</a>
+```
+
+Special attributes likes `class` behave as expected when combined with spreading:
+
+```python
+classes = ["btn", {"active": True}]
+attrs = {"class": classes, "id": "act_now", "data": {"wow": "such-attr"}}
+button = html(t'<button {attrs}>Click me</button>')
+# <button class="btn active" id="act_now" data-wow="such-attr">Click me</button>
+```
+
+### Conditional Rendering
+
+You can use Python's conditional expressions for dynamic content:
+
+```python
+is_logged_in = True
+user_content = t"<span>Welcome back!</span>"
+guest_content = t"<a href='/login'>Please log in</a>"
+header = html(t"<div>{user_content if is_logged_in else guest_content}</div>")
+# <div><span>Welcome back!</span></div>
+```
+
+Short-circuit evaluation is also supported for conditionally including elements:
+
+```python
+show_warning = False
+warning = t'<div class="alert">Warning message</div>'
+page = html(t"<main>{show_warning and warning}</main>")
+# <main></main>
+```
+
+### Lists and Iteration
+
+Generate repeated elements using list comprehensions:
+
+```python
+fruits = ["Apple", "Banana", "Cherry"]
+fruit_list = html(t"<ul>{[t'<li>{fruit}</li>' for fruit in fruits]}</ul>")
+# <ul><li>Apple</li><li>Banana</li><li>Cherry</li></ul>
+```
+
+### Raw HTML Injection
+
+The `html-tstring` package provides several ways to include trusted raw HTML content in your templates. This is useful when you have HTML content that you _know_ is safe and do not wish to escape.
+
+Under the hood, `html-tstring` builds on top of the familiar [MarkupSafe](https://pypi.org/project/MarkupSafe/) library to handle trusted HTML content. If you've used Flask, Jinja2, or similar libraries, this will feel very familiar.
+
+The `Markup` class from MarkupSafe is available for use:
+
+```python
+from html_tstring import html, Markup
+
+trusted_html = Markup("<strong>This is safe HTML</strong>")
+content = html(t"<div>{trusted_html}</div>")
+# <div><strong>This is safe HTML</strong></div>
+```
+
+As a convenience, `html-tstring` also supports a `:safe` format specifier that marks a string as safe HTML:
+
+```python
+trusted_html = "<em>Emphasized text</em>"
+page = html(t"<p>Here is some {trusted_html:safe} content.</p>")
+# <p>Here is some <em>Emphasized text</em> content.</p>
+```
+
+For interoperability with other templating libraries, any object that implements a `__html__` method will be treated as safe HTML. Many popular libraries (including MarkupSafe and Django) use this convention:
+
+```python
+class SafeWidget:
+    def __html__(self):
+        return "<button>Custom Widget</button>"
+
+page = html(t"<div>My widget: {SafeWidget()}</div>")
+# <div>My widget: <button>Custom Widget</button></div>
+```
+
+TODO: support explicitly marking content as `unsafe` with a format specifier, too.
+
+### Template Composition
+
+You can easily combine multiple templates and create reusable components.
+
+Template nesting is straightforward:
+
+```python
+content = t"<h1>My Site</h1>"
+page = html(t"<div>{content}</div>")
+# <div><h1>My Site</h1></div>
+```
+
+In the example above, `content` is a `Template` object that gets correctly parsed and embedded within the outer template. You can also explicitly call `html()` on nested templates if you prefer:
+
+```python
+content = html(t"<h1>My Site</h1>")
+page = html(t"<div>{content}</div>")
+# <div><h1>My Site</h1></div>
+```
+
+The result is the same either way.
+
+### Advanced Features
+
+#### Component Functions
+
+Create reusable template functions that work like custom HTML elements:
+
+```python
+def Alert(message: str, type: str = "info", **props) -> Template:
+    alert_class = f"alert alert-{type}"
+    attrs = {"class": alert_class, **props}
+    return t'<div {attrs}>{message}</div>'
+
+# Use your component
+warning = html(t'<{Alert} message="Be careful!" type="warning" id="main-alert" />')
+```
+
+#### Fragment Rendering
+
+Templates can return multiple root elements:
+
+```python
+def TableColumns() -> Template:
+    return t"<td>Column 1</td><td>Column 2</td>"
+
+table = html(t"<table><tr><{TableColumns} /></tr></table>")
+```
+
+The `html()` function returns a tree of nodes that can be converted to strings, manipulated programmatically, or composed with other templates for maximum flexibility.
+
+#### Context
+
+TODO: implement context feature

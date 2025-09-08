@@ -5,12 +5,10 @@ build-backend = "hatchling.build"
 [project]
 name = "html-tstring"
 version = "0.1.0"
-description = "Tools to manipulate and render HTML using Python 3.14's t-strings."
+description = "A 🤘 rockin' t-string HTML templating system for Python 3.14."
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = [
-    "markupsafe>=3.0.2",
-]
+dependencies = ["markupsafe>=3.0.2"]
 authors = [{ name = "Dave Peck", email = "davepeck@davepeck.org" }]
 license = { text = "MIT" }
 classifiers = [
