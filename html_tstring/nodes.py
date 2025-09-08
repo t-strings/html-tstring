@@ -1,4 +1,6 @@
+import typing as t
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from markupsafe import escape
 
@@ -31,7 +33,7 @@ CONTENT_ELEMENTS = CDATA_CONTENT_ELEMENTS | RCDATA_CONTENT_ELEMENTS
 # FUTURE: make nodes frozen (and have the parser work with mutable builders)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Node:
     def __html__(self) -> str:
         """Return the HTML representation of the node."""
@@ -39,7 +41,7 @@ class Node:
         return str(self)
 
 
-@dataclass(slots=False)
+@dataclass(slots=True, frozen=True)
 class Text(Node):
     text: str
 
@@ -48,15 +50,15 @@ class Text(Node):
         return escape(self.text)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Fragment(Node):
-    children: list[Node] = field(default_factory=list)
+    children: t.Sequence[Node] = field(default_factory=tuple)
 
     def __str__(self) -> str:
         return "".join(str(child) for child in self.children)
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Comment(Node):
     text: str
 
@@ -64,7 +66,7 @@ class Comment(Node):
         return f"<!--{self.text}-->"
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class DocumentType(Node):
     text: str = "html"
 
@@ -72,11 +74,13 @@ class DocumentType(Node):
         return f"<!DOCTYPE {self.text}>"
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, frozen=True)
 class Element(Node):
     tag: str
-    attrs: dict[str, str | None] = field(default_factory=dict)
-    children: list[Node] = field(default_factory=list)
+    attrs: t.Mapping[str, str | None] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    children: t.Sequence[Node] = field(default_factory=tuple)
 
     def __post_init__(self):
         """Ensure all preconditions are met."""
