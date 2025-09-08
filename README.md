@@ -2,6 +2,11 @@
 
 A 🤘 rockin' t-string HTML templating system for Python 3.14.
 
+[![PyPI](https://img.shields.io/pypi/v/html-tstring.svg)](https://pypi.org/project/html-tstring/)
+[![Tests](https://github.com/t-strings/html-tstring/actions/workflows/ci.yml/badge.svg)](https://github.com/t-strings/tdom/actions/workflows/pytest.yml)
+[![Changelog](https://img.shields.io/github/v/release/t-strings/html-tstring?include_prereleases&label=changelog)](https://github.com/t-strings/html-tstring/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/t-strings/html-tstring/blob/main/LICENSE)
+
 ## Installation
 
 Just run:
@@ -251,31 +256,43 @@ The result is the same either way.
 
 #### Component Functions
 
-Create reusable template functions that work like custom HTML elements:
+You can create reusable component functions that generate templates with dynamic content and attributes. Use these like custom HTML elements in your templates.
+
+The basic form of all component functions is:
 
 ```python
-def Alert(message: str, type: str = "info", **props) -> Template:
-    alert_class = f"alert alert-{type}"
-    attrs = {"class": alert_class, **props}
-    return t'<div {attrs}>{message}</div>'
+from typing import Any
 
-# Use your component
-warning = html(t'<{Alert} message="Be careful!" type="warning" id="main-alert" />')
+def MyComponent(*children: Node, **attrs: Any) -> Template:
+    # Build your template using the provided props
+    return t"<div {attrs}>{children}</div>"
 ```
 
-#### Fragment Rendering
-
-Templates can return multiple root elements:
+To _invoke_ your component within an HTML template, use the special `<{ComponentName} ... />` syntax:
 
 ```python
-def TableColumns() -> Template:
-    return t"<td>Column 1</td><td>Column 2</td>"
-
-table = html(t"<table><tr><{TableColumns} /></tr></table>")
+result = html(t"<{MyComponent} id='comp1'>Hello, Component!</{MyComponent}>")
+# <div id="comp1">Hello, Component!</div>
 ```
 
-The `html()` function returns a tree of nodes that can be converted to strings, manipulated programmatically, or composed with other templates for maximum flexibility.
+Because attributes are passed as keyword arguments, you can explicitly provide type hints for better editor support:
+
+```python
+from typing import Any
+
+def Link(*, href: str, text: str, **props: Any) -> Template:
+    return t'<a href="{href}" {props}>{text}</a>'
+
+result = html(t'<{Link} href="https://example.com" text="Example" target="_blank" />')
+# <a href="https://example.com" target="_blank">Example</a>
+```
+
+In addition to returning a `Template` directly, component functions may also return any `Node` type found in [`html_tstring.nodes`](./html_tstring/nodes.py). This allows you to build more complex components that manipulate the HTML structure programmatically.
 
 #### Context
 
 TODO: implement context feature
+
+#### Working with `Node` Objects
+
+TODO: say more about working with them directly

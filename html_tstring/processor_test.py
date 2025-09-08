@@ -1,9 +1,10 @@
+import typing as t
 from string.templatelib import Template
 
 import pytest
 from markupsafe import Markup
 
-from .nodes import Element, Fragment, Text
+from .nodes import Element, Fragment, Node, Text
 from .processor import html
 
 # --------------------------------------------------------------------------
@@ -456,14 +457,14 @@ def test_interpolated_style_attribute():
 
 
 def TemplateComponent(
-    *children: Element | str, first: int, second: int, third: str, **props: str | None
+    *children: Node, first: int, second: int, third: str, **attrs: t.Any
 ) -> Template:
-    attrs = {
+    new_attrs = {
         "id": third,
         "data": {"first": first, "second": second},
-        **props,
+        **attrs,
     }
-    return t"<div {attrs}>Component: {children}</div>"
+    return t"<div {new_attrs}>Component: {children}</div>"
 
 
 def test_interpolated_template_component():
