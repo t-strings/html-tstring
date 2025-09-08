@@ -35,7 +35,7 @@ def test_text():
 
 def test_text_escaping():
     text = Text("<script>alert('XSS')</script>")
-    assert str(text) == "&lt;script&gt;alert('XSS')&lt;/script&gt;"
+    assert str(text) == "&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;"
 
 
 def test_text_safe():
@@ -215,9 +215,9 @@ def test_dunder_html_method():
 
 def test_escaping_of_text_content():
     div = Element("div", children=[Text("<script>alert('XSS')</script>")])
-    assert str(div) == "<div>&lt;script&gt;alert('XSS')&lt;/script&gt;</div>"
+    assert str(div) == "<div>&lt;script&gt;alert(&#39;XSS&#39;)&lt;/script&gt;</div>"
 
 
 def test_escaping_of_attribute_values():
     div = Element("div", attrs={"class": '">XSS<'})
-    assert str(div) == '<div class="&quot;&gt;XSS&lt;"></div>'
+    assert str(div) == '<div class="&#34;&gt;XSS&lt;"></div>'

@@ -8,8 +8,8 @@ from string.templatelib import Interpolation, Template
 from markupsafe import Markup
 
 from .classnames import classnames
-from .nodes import Element, Fragment, HasHTMLDunder, Node, Text
-from .parser import parse_html_iter
+from .nodes import Element, Fragment, Node, Text
+from .parser import parse_html
 from .utils import format_interpolation as base_format_interpolation
 
 # --------------------------------------------------------------------------
@@ -18,11 +18,18 @@ from .utils import format_interpolation as base_format_interpolation
 
 
 def _format_safe(value: object, format_spec: str) -> str:
+    """Use Markup() to mark a value as safe HTML."""
     assert format_spec == "safe"
     return Markup(value)
 
 
-CUSTOM_FORMATTERS = (("safe", _format_safe),)
+def _format_unsafe(value: object, format_spec: str) -> str:
+    """Convert a value to a plain string, forcing it to be treated as unsafe."""
+    assert format_spec == "unsafe"
+    return str(value)
+
+
+CUSTOM_FORMATTERS = (("safe", _format_safe), ("unsafe", _format_unsafe))
 
 
 def format_interpolation(interpolation: Interpolation) -> object:
@@ -94,7 +101,7 @@ def _instrument_and_parse_internal(
     The result is cached to avoid re-parsing the same template multiple times.
     """
     instrumented = _instrument(strings, callable_ids)
-    return parse_html_iter(instrumented)
+    return parse_html(instrumented)
 
 
 def _callable_id(value: object) -> int | None:
@@ -280,8 +287,6 @@ def _node_from_value(value: object) -> Node:
             return value
         case Template():
             return html(value)
-        case HasHTMLDunder():
-            return Text(value)
         case False:
             return Text("")
         case Iterable():
@@ -312,12 +317,12 @@ def _invoke_component(
             return result
         case Template():
             return html(result)
-        case HasHTMLDunder() | str():
+        case str():
             return Text(result)
         case _:
             raise TypeError(
-                f"Component callable must return a Node, Template, str, or "
-                f"HasHTMLDunder, got {type(result).__name__}"
+                f"Component callable must return a Node, Template, or str; "
+                f"got {type(result).__name__}"
             )
 
 

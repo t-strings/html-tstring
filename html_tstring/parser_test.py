@@ -1,7 +1,7 @@
 import pytest
 
 from .nodes import Comment, DocumentType, Element, Fragment, Text
-from .parser import parse_html, parse_html_iter
+from .parser import parse_html
 
 
 def test_parse_empty():
@@ -173,7 +173,7 @@ def test_parse_html_iter_preserves_chunks():
         "<span>world</span>",
         "!</div>",
     ]
-    node = parse_html_iter(chunks)
+    node = parse_html(chunks)
     assert node == Element(
         "div",
         children=[

@@ -142,7 +142,7 @@ def test_raw_html_injection_with_helper():
 
 
 def test_raw_html_injection_with_dunder_html_protocol():
-    class SafeContent:
+    class SafeContent(str):
         def __init__(self, text):
             self._text = text
 
@@ -319,12 +319,12 @@ def test_escaping_of_interpolated_attribute_value():
     node = html(t'<a href="{url}">Link</a>')
     assert node == Element(
         "a",
-        attrs={"href": 'https://example.com/?q="test"&lang=en'},
+        attrs={"href": Markup('https://example.com/?q="test"&lang=en')},
         children=[Text("Link")],
     )
     assert (
         str(node)
-        == '<a href="https://example.com/?q=&quot;test&quot;&amp;lang=en">Link</a>'
+        == '<a href="https://example.com/?q=&#34;test&#34;&amp;lang=en">Link</a>'
     )
 
 

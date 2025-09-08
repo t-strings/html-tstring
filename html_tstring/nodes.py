@@ -1,7 +1,6 @@
-import typing as t
 from dataclasses import dataclass, field
-from functools import cached_property
-from html import escape
+
+from markupsafe import escape
 
 # See https://developer.mozilla.org/en-US/docs/Glossary/Void_element
 VOID_ELEMENTS = frozenset(
@@ -28,16 +27,8 @@ CDATA_CONTENT_ELEMENTS = frozenset(["script", "style"])
 RCDATA_CONTENT_ELEMENTS = frozenset(["textarea", "title"])
 CONTENT_ELEMENTS = CDATA_CONTENT_ELEMENTS | RCDATA_CONTENT_ELEMENTS
 
-# TODO: add a pretty-printer for nodes for debugging
-# TODO: consider how significant whitespace is handled from t-string to nodes
-
-
-@t.runtime_checkable
-class HasHTMLDunder(t.Protocol):
-    def __html__(self) -> str: ...
-
-
-type HTMLDunder = t.Callable[[], str]
+# FUTURE: add a pretty-printer to nodes for debugging
+# FUTURE: make nodes frozen (and have the parser work with mutable builders)
 
 
 @dataclass(slots=True)
@@ -50,24 +41,11 @@ class Node:
 
 @dataclass(slots=False)
 class Text(Node):
-    # Django's `SafeString` and Markupsafe/Jinja2's `Markup` both inherit
-    # from `str`, but that is not a requirement for the `__html__` dunder.
-    text: str | HasHTMLDunder
-
-    @cached_property
-    def _cached_str(self) -> str:
-        if isinstance(self.text, HasHTMLDunder):
-            return self.text.__html__()
-        return escape(t.cast(str, self.text), quote=False)
-
-    def _as_unescaped(self) -> str:
-        """Return the text as-is, without escaping. For internal use only."""
-        if isinstance(self.text, HasHTMLDunder):
-            return self.text.__html__()
-        return self.text
+    text: str
 
     def __str__(self) -> str:
-        return self._cached_str
+        # Use markupsafe's escape to handle HTML escaping
+        return escape(self.text)
 
 
 @dataclass(slots=True)
@@ -113,20 +91,26 @@ class Element(Node):
     def is_void(self) -> bool:
         return self.tag in VOID_ELEMENTS
 
+    @property
+    def is_content(self) -> bool:
+        return self.tag in CONTENT_ELEMENTS
+
     def __str__(self) -> str:
-        # TODO: CONSIDER: should values in attrs support the __html__ dunder?
+        # We use markupsafe's escape to handle HTML escaping of attribute values
+        # which means it's possible to mark them as safe if needed.
         attrs_str = "".join(
-            f" {key}" if value is None else f' {key}="{escape(value, quote=True)}"'
+            f" {key}" if value is None else f' {key}="{escape(value)}"'
             for key, value in self.attrs.items()
         )
         if self.is_void:
             return f"<{self.tag}{attrs_str} />"
         if not self.children:
             return f"<{self.tag}{attrs_str}></{self.tag}>"
-        if self.tag in CONTENT_ELEMENTS:
-            # Content elements should not escape their content
+        if self.is_content:
+            # Content elements should *not* escape their content when
+            # rendering to HTML. Sheesh, HTML is weird.
             children_str = "".join(
-                child._as_unescaped() if isinstance(child, Text) else str(child)
+                child.text if isinstance(child, Text) else str(child)
                 for child in self.children
             )
         else:
