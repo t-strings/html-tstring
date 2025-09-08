@@ -134,7 +134,7 @@ def test_conversions():
 # --------------------------------------------------------------------------
 
 
-def test_raw_html_injection_with_helper():
+def test_raw_html_injection_with_markupsafe():
     raw_content = Markup("<strong>I am bold</strong>")
     node = html(t"<div>{raw_content}</div>")
     assert node == Element("div", children=[Text(text=raw_content)])
@@ -142,7 +142,7 @@ def test_raw_html_injection_with_helper():
 
 
 def test_raw_html_injection_with_dunder_html_protocol():
-    class SafeContent(str):
+    class SafeContent:
         def __init__(self, text):
             self._text = text
 
@@ -153,7 +153,12 @@ def test_raw_html_injection_with_dunder_html_protocol():
     content = SafeContent("emphasized")
     node = html(t"<p>Here is some {content}.</p>")
     assert node == Element(
-        "p", children=[Text("Here is some "), Text(content), Text(".")]
+        "p",
+        children=[
+            Text("Here is some "),
+            Text(Markup("<em>emphasized</em>")),
+            Text("."),
+        ],
     )
     assert str(node) == "<p>Here is some <em>emphasized</em>.</p>"
 
@@ -170,6 +175,20 @@ def test_raw_html_injection_with_format_spec():
         ],
     )
     assert str(node) == "<p>This is <u>underlined</u> text.</p>"
+
+
+def test_raw_html_injection_with_markupsafe_unsafe_format_spec():
+    supposedly_safe = Markup("<i>italic</i>")
+    node = html(t"<p>This is {supposedly_safe:unsafe} text.</p>")
+    assert node == Element(
+        "p",
+        children=[
+            Text("This is "),
+            Text(supposedly_safe),
+            Text(" text."),
+        ],
+    )
+    assert str(node) == "<p>This is &lt;i&gt;italic&lt;/i&gt; text.</p>"
 
 
 # --------------------------------------------------------------------------

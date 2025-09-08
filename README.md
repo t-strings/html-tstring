@@ -228,7 +228,14 @@ page = html(t"<div>My widget: {SafeWidget()}</div>")
 # <div>My widget: <button>Custom Widget</button></div>
 ```
 
-TODO: support explicitly marking content as `unsafe` with a format specifier, too.
+You can also explicitly mark a string as "unsafe" using the `:unsafe` format specifier. This forces the string to be escaped, even if it would normally be treated as safe:
+
+```python
+from html_tstring import html, Markup
+trusted_html = Markup("<strong>This is safe HTML</strong>")
+page = html(t"<div>{trusted_html:unsafe}</div>")
+# <div>&lt;strong&gt;This is safe HTML&lt;/strong&gt;</div>
+```
 
 ### Template Composition
 

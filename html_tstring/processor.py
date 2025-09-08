@@ -12,6 +12,12 @@ from .nodes import Element, Fragment, Node, Text
 from .parser import parse_html
 from .utils import format_interpolation as base_format_interpolation
 
+
+@t.runtime_checkable
+class HasHTMLDunder(t.Protocol):
+    def __html__(self) -> str: ...
+
+
 # --------------------------------------------------------------------------
 # Value formatting
 # --------------------------------------------------------------------------
@@ -292,6 +298,8 @@ def _node_from_value(value: object) -> Node:
         case Iterable():
             children = [_node_from_value(v) for v in value]
             return Fragment(children=children)
+        case HasHTMLDunder():
+            return Text(Markup(value.__html__()))
         case _:
             return Text(str(value))
 
@@ -319,6 +327,8 @@ def _invoke_component(
             return html(result)
         case str():
             return Text(result)
+        case HasHTMLDunder():
+            return Text(Markup(result.__html__()))
         case _:
             raise TypeError(
                 f"Component callable must return a Node, Template, or str; "
