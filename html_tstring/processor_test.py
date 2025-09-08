@@ -475,12 +475,13 @@ def test_interpolated_style_attribute():
 # --------------------------------------------------------------------------
 
 
-# TODO: I need to get precise about the typing story here. *IS* `second`
-# really an `int`? After all, the processor has already substituted the
-# attributes, so it may be a `str` at this point.
 def TemplateComponent(
     *children: Node, first: str, second: int, third: str, **attrs: t.Any
 ) -> Template:
+    # Ensure type correctness of props at runtime for testing purposes
+    assert isinstance(first, str)
+    assert isinstance(second, int)
+    assert isinstance(third, str)
     new_attrs = {
         "id": third,
         "data": {"first": first, "second": second},

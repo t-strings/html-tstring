@@ -187,7 +187,7 @@ def _substitute_style_attr(value: object) -> t.Iterable[tuple[str, str | None]]:
 
 def _substitute_spread_attrs(
     value: object,
-) -> t.Iterable[tuple[str, str | t.Callable | None]]:
+) -> t.Iterable[tuple[str, object | None]]:
     """
     Substitute a spread attribute based on the interpolated value.
 
@@ -214,7 +214,7 @@ CUSTOM_ATTR_HANDLERS = {
 def _substitute_attr(
     key: str,
     value: object,
-) -> t.Iterable[tuple[str, str | t.Callable | None]]:
+) -> t.Iterable[tuple[str, object | None]]:
     """
     Substitute a single attribute based on its key and the interpolated value.
 
@@ -230,23 +230,19 @@ def _substitute_attr(
 
     # General handling for all other attributes:
     match value:
-        case str():
-            yield (key, value)
         case True:
             yield (key, None)
         case False | None:
             pass
-        case _ if callable(value):
-            yield (key, value)
         case _:
-            yield (key, str(value))
+            yield (key, value)
 
 
 def _substitute_attrs(
     attrs: dict[str, str | None], interpolations: tuple[Interpolation, ...]
-) -> dict[str, str | t.Callable | None]:
+) -> dict[str, object | None]:
     """Substitute placeholders in attributes based on the corresponding interpolations."""
-    new_attrs: dict[str, str | ComponentCallable | None] = {}
+    new_attrs: dict[str, object | None] = {}
     for key, value in attrs.items():
         if value and value.startswith(_PLACEHOLDER_PREFIX):
             index = _placholder_index(value)
@@ -314,7 +310,7 @@ type ComponentCallable = t.Callable[..., ComponentReturn | t.Iterable[ComponentR
 
 def _invoke_component(
     tag: str,
-    new_attrs: dict[str, str | t.Callable | None],
+    new_attrs: dict[str, object | None],
     new_children: list[Node],
     interpolations: tuple[Interpolation, ...],
 ) -> Node:
@@ -345,6 +341,11 @@ def _invoke_component(
             )
 
 
+def _stringify_attrs(attrs: dict[str, object | None]) -> dict[str, str | None]:
+    """Convert all attribute values to strings, preserving None values."""
+    return {k: str(v) if v is not None else None for k, v in attrs.items()}
+
+
 def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) -> Node:
     """Substitute placeholders in a node based on the corresponding interpolations."""
     match p_node:
@@ -359,10 +360,8 @@ def _substitute_node(p_node: Node, interpolations: tuple[Interpolation, ...]) ->
             if tag.startswith(_PLACEHOLDER_PREFIX):
                 return _invoke_component(tag, new_attrs, new_children, interpolations)
             else:
-                final_attrs = {
-                    k: str(v) if v is not None else None for k, v in new_attrs.items()
-                }
-                return Element(tag=tag, attrs=final_attrs, children=new_children)
+                new_attrs = _stringify_attrs(new_attrs)
+                return Element(tag=tag, attrs=new_attrs, children=new_children)
         case Fragment(children=children):
             new_children = _substitute_and_flatten_children(children, interpolations)
             return Fragment(children=new_children)
