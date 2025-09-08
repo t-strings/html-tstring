@@ -323,8 +323,11 @@ def _invoke_component(
         raise TypeError(
             f"Expected a callable for component invocation, got {type(value).__name__}"
         )
+    # Replace attr names hyphens with underscores for Python kwargs
+    kwargs = {k.replace("-", "_"): v for k, v in new_attrs.items()}
+
     # Call the component and return the resulting node
-    result = value(*new_children, **new_attrs)
+    result = value(*new_children, **kwargs)
     match result:
         case Node():
             return result

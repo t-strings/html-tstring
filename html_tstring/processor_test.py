@@ -476,14 +476,14 @@ def test_interpolated_style_attribute():
 
 
 def TemplateComponent(
-    *children: Node, first: str, second: int, third: str, **attrs: t.Any
+    *children: Node, first: str, second: int, third_arg: str, **attrs: t.Any
 ) -> Template:
     # Ensure type correctness of props at runtime for testing purposes
     assert isinstance(first, str)
     assert isinstance(second, int)
-    assert isinstance(third, str)
+    assert isinstance(third_arg, str)
     new_attrs = {
-        "id": third,
+        "id": third_arg,
         "data": {"first": first, "second": second},
         **attrs,
     }
@@ -492,7 +492,7 @@ def TemplateComponent(
 
 def test_interpolated_template_component():
     node = html(
-        t'<{TemplateComponent} first=1 second={99} third="comp1" class="my-comp">Hello, Component!</{TemplateComponent}>'
+        t'<{TemplateComponent} first=1 second={99} third-arg="comp1" class="my-comp">Hello, Component!</{TemplateComponent}>'
     )
     assert node == Element(
         "div",
@@ -539,13 +539,13 @@ def test_fragment_from_component():
 
 
 def test_component_passed_as_attr_value():
-    def WrapperComponent(
-        *children: Node, another: ComponentCallable, **attrs: t.Any
+    def Wrapper(
+        *children: Node, sub_component: ComponentCallable, **attrs: t.Any
     ) -> Template:
-        return t"<{another} {attrs}>{children}</{another}>"
+        return t"<{sub_component} {attrs}>{children}</{sub_component}>"
 
     node = html(
-        t'<{WrapperComponent} another={TemplateComponent} class="wrapped" first=1 second={99} third="comp1"><p>Inside wrapper</p></{WrapperComponent}>'
+        t'<{Wrapper} sub-component={TemplateComponent} class="wrapped" first=1 second={99} third-arg="comp1"><p>Inside wrapper</p></{Wrapper}>'
     )
     assert node == Element(
         "div",
