@@ -107,7 +107,7 @@ button = html(t'<button class="{classes}">Click me</button>')
 # <button class="btn btn-primary active">Click me</button>
 ```
 
-See the [`classnames()`](./html_tstring/classnames_test.py) helper function for more information on how class names are combined.
+See the [`classnames()`](https://github.com/t-strings/html-tstring/blob/main/html_tstring/classnames_test.py) helper function for more information on how class names are combined.
 
 #### The `style` Attribute
 
@@ -252,8 +252,6 @@ page = html(t"<div>{content}</div>")
 
 The result is the same either way.
 
-### Advanced Features
-
 #### Component Functions
 
 You can create reusable component functions that generate templates with dynamic content and attributes. Use these like custom HTML elements in your templates.
@@ -287,12 +285,26 @@ result = html(t'<{Link} href="https://example.com" text="Example" target="_blank
 # <a href="https://example.com" target="_blank">Example</a>
 ```
 
-In addition to returning a `Template` directly, component functions may also return any `Node` type found in [`html_tstring.nodes`](./html_tstring/nodes.py). This allows you to build more complex components that manipulate the HTML structure programmatically.
+In addition to returning a `Template` directly, component functions may also return any `Node` type found in [`html_tstring.nodes`](https://github.com/t-strings/html-tstring/blob/main/html_tstring/nodes.py). This allows you to build more complex components that manipulate the HTML structure programmatically.
+
+#### SVG Support
+
+TODO: say more about SVG support
 
 #### Context
 
 TODO: implement context feature
 
+### The `html_tstring` Module
+
 #### Working with `Node` Objects
 
 TODO: say more about working with them directly
+
+#### The `classnames()` Helper
+
+TODO: say more about it
+
+#### Utilities
+
+TODO: say more about them
