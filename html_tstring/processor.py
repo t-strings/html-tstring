@@ -77,8 +77,6 @@ def _instrument(
     """
     count = len(strings)
 
-    print("Instrumenting:", strings, callable_ids)  # DEBUG
-
     callable_placeholders: dict[int, str] = {}
 
     for i, s in enumerate(strings):
@@ -107,9 +105,7 @@ def _instrument_and_parse_internal(
     The result is cached to avoid re-parsing the same template multiple times.
     """
     instrumented = _instrument(strings, callable_ids)
-    i_list = list(instrumented)
-    print("Instrumented:", "".join(i_list))  # DEBUG
-    return parse_html(i_list)
+    return parse_html(instrumented)
 
 
 def _callable_id(value: object) -> int | None:
@@ -333,7 +329,6 @@ def _invoke_component(
         )
     # Call the component and return the resulting node
     result = value(*new_children, **new_attrs)
-    print("RESULTIS:", result)  # DEBUG
     match result:
         case Node():
             return result

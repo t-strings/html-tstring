@@ -475,6 +475,9 @@ def test_interpolated_style_attribute():
 # --------------------------------------------------------------------------
 
 
+# TODO: I need to get precise about the typing story here. *IS* `second`
+# really an `int`? After all, the processor has already substituted the
+# attributes, so it may be a `str` at this point.
 def TemplateComponent(
     *children: Node, first: str, second: int, third: str, **attrs: t.Any
 ) -> Template:
@@ -538,7 +541,6 @@ def test_component_passed_as_attr_value():
     def WrapperComponent(
         *children: Node, another: ComponentCallable, **attrs: t.Any
     ) -> Template:
-        print("WrapperComponent called with:", type(another), another)
         return t"<{another} {attrs}>{children}</{another}>"
 
     node = html(
