@@ -85,7 +85,6 @@ Boolean attributes are supported too. Just use a boolean value in the attribute 
 
 ```python
 form_button = html(t"<button disabled={True} hidden={False}>Submit</button>")
-print(form_button)
 # <button disabled>Submit</button>
 ```
 
@@ -285,12 +284,14 @@ Because attributes are passed as keyword arguments, you can explicitly provide t
 ```python
 from typing import Any
 
-def Link(*, href: str, text: str, **props: Any) -> Template:
-    return t'<a href="{href}" {props}>{text}</a>'
+def Link(*, href: str, text: str, data_value: int, **attrs: Any) -> Template:
+    return t'<a href="{href}" {attrs}>{text}: {data_value}</a>'
 
-result = html(t'<{Link} href="https://example.com" text="Example" target="_blank" />')
-# <a href="https://example.com" target="_blank">Example</a>
+result = html(t'<{Link} href="https://example.com" text="Example" data-value={42} target="_blank" />')
+# <a href="https://example.com" target="_blank">Example: 42</a>
 ```
+
+Note that attributes with hyphens (like `data-value`) are converted to underscores (`data_value`) in the function signature.
 
 In addition to returning a `Template` directly, component functions may also return any `Node` type found in [`html_tstring.nodes`](https://github.com/t-strings/html-tstring/blob/main/html_tstring/nodes.py). This allows you to build more complex components that manipulate the HTML structure programmatically.
 
