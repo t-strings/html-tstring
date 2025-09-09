@@ -91,7 +91,7 @@ def test_parse_nested_elements():
 # --------------------------------------------------------------------------
 
 
-def text_interpolated_text_content():
+def test_interpolated_text_content():
     name = "Alice"
     node = html(t"<p>Hello, {name}!</p>")
     assert node == Element("p", children=[Text("Hello, "), Text("Alice"), Text("!")])
