@@ -19,6 +19,10 @@ def test_cslx_empty_strings():
     assert classnames("", "btn", "", "btn-primary", "") == "btn btn-primary"
 
 
+def test_clsx_booleans():
+    assert classnames(True, False) == ""
+
+
 def test_classnames_lists_and_tuples():
     assert (
         classnames(["btn", "btn-primary"], ("active", "disabled"))
