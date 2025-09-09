@@ -165,6 +165,11 @@ def test_parse_unclosed_tag():
         _ = parse_html("<div>Unclosed")
 
 
+def test_parse_unexpected_closing_tag():
+    with pytest.raises(ValueError):
+        _ = parse_html("Unopened</div>")
+
+
 def test_parse_html_iter_preserves_chunks():
     chunks = [
         "<div>",

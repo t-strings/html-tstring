@@ -44,6 +44,8 @@ class NodeParser(HTMLParser):
             if most_recent_closed and most_recent_closed.tag == tag:
                 # Ignore this call; we've already closed it.
                 return
+
+        if not self.stack:
             raise ValueError(f"Unexpected closing tag </{tag}> with no open element.")
 
         element = self.stack.pop()
