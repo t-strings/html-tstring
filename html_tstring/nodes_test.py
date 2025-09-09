@@ -74,6 +74,18 @@ def test_void_element_no_children():
     assert str(br) == "<br />"
 
 
+def test_element_invalid_empty_tag():
+    with pytest.raises(ValueError):
+        _ = Element("")
+
+
+def test_element_is_content():
+    assert Element("script").is_content
+    assert Element("title").is_content
+    assert not Element("div").is_content
+    assert not Element("br").is_content  # Void element
+
+
 def test_void_element_with_attributes():
     br = Element("br", attrs={"class": "line-break", "hidden": None})
     assert str(br) == '<br class="line-break" hidden />'
