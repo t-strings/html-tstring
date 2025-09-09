@@ -35,14 +35,14 @@ class NodeParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag in VOID_ELEMENTS:
             # Special case: handle Python issue #69445 (see comment above).
+            most_recent_closed = self.get_most_recent_closed_element()
+            if most_recent_closed and most_recent_closed.tag == tag:
+                # Ignore this call; we've already closed it.
+                return
             open_element = self.get_open_element()
             if open_element and open_element.tag == tag:
                 _ = self.stack.pop()
                 self.append_child(open_element)
-                return
-            most_recent_closed = self.get_most_recent_closed_element()
-            if most_recent_closed and most_recent_closed.tag == tag:
-                # Ignore this call; we've already closed it.
                 return
 
         if not self.stack:

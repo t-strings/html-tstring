@@ -170,6 +170,16 @@ def test_parse_unexpected_closing_tag():
         _ = parse_html("Unopened</div>")
 
 
+def test_nested_self_closing_tags():
+    node = parse_html("<div></div><br>")
+    assert node == Fragment(
+        children=[
+            Element("div"),
+            Element("br"),
+        ]
+    )
+
+
 def test_parse_html_iter_preserves_chunks():
     chunks = [
         "<div>",
