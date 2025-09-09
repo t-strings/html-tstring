@@ -39,7 +39,7 @@ class Node:
         return str(self)
 
 
-@dataclass(slots=False)
+@dataclass(slots=True)
 class Text(Node):
     text: str
 
